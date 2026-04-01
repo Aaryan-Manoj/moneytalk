@@ -1,0 +1,24 @@
+@startuml
+left to right direction
+actor User
+
+rectangle "MoneyTalk System" {
+
+  User --> (Sign Up)
+  User --> (Login)
+  User --> (Reset Password)
+
+  User --> (Access Dashboard)
+  User --> (Navigate to Personal Finance)
+  User --> (Navigate to Group Finance)
+  User --> (Navigate to Multi Access)
+  User --> (Navigate to Month End Summary)
+
+  (Login) --> (Authenticate via Firebase)
+  (Sign Up) --> (Create User in Firebase Auth)
+  (Sign Up) --> (Store User in Firestore)
+
+  (Access Dashboard) --> (Display Options)
+}
+
+@enduml

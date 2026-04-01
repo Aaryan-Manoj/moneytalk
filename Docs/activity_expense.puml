@@ -1,0 +1,17 @@
+@startuml
+
+start
+
+:Open Expense Page;
+:Enter item, category, amount, date;
+
+if (Valid input?) then (Yes)
+  :Add expense;
+  :Update Firestore;
+  :Update UI;
+else (No)
+  :Show error;
+endif
+
+stop
+@enduml

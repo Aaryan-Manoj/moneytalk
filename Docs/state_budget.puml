@@ -1,0 +1,14 @@
+@startuml
+
+[*] --> NoBudget
+
+NoBudget --> BudgetCreated : setBudget()
+BudgetCreated --> UpdatingBudget : edit
+UpdatingBudget --> BudgetCreated
+
+BudgetCreated --> AddingExpense : addExpense()
+AddingExpense --> BudgetCreated
+
+BudgetCreated --> ViewingSummary
+
+@enduml

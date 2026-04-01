@@ -1,0 +1,19 @@
+@startuml
+
+actor User
+participant "ExpenseEntry.jsx" as UI
+participant "PersonalContext" as Context
+participant "Firestore" as DB
+
+User -> UI : Enter expense details
+User -> UI : Click Add
+
+UI -> Context : addExpense(expense)
+
+Context -> DB : addDoc()
+DB --> Context : expense ID
+
+Context -> Context : update state
+Context --> UI : updated expenses
+
+@enduml

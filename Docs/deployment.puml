@@ -1,0 +1,15 @@
+@startuml
+
+node "User Device (Browser)" {
+  component "React App"
+}
+
+node "Firebase Cloud" {
+  component "Firebase Auth"
+  component "Firestore DB"
+}
+
+"React App" --> "Firebase Auth"
+"React App" --> "Firestore DB"
+
+@enduml

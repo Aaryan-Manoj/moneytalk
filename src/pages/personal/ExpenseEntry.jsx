@@ -38,7 +38,10 @@ export default function ExpenseEntry() {
 
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
-      <button onClick={() => navigate('/personal')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer',marginBottom:'24px'}}>← Back</button>
+      <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
+        <button onClick={() => navigate('/personal')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer'}}>← Back</button>
+        <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
+      </div>
       <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'8px'}}>Daily Expenses</h1>
 
       <div style={{background:'#2563EB',borderRadius:'16px',padding:'24px',marginBottom:'24px'}}>
@@ -46,6 +49,18 @@ export default function ExpenseEntry() {
         <p style={{fontSize:'32px',fontWeight:'700',color:'#FFFFFF'}}>₹{remaining.toLocaleString()}</p>
         <p style={{fontSize:'13px',color:'rgba(255,255,255,0.7)',marginTop:'4px'}}>{budget.month || 'No month set'}</p>
       </div>
+
+      {budget.allocations && budget.allocations.filter(a => a.label).length > 0 && (
+        <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
+          <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'12px'}}>FIXED ALLOCATIONS</p>
+          {budget.allocations.filter(a => a.label).map((a, i) => (
+            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #F3F4F6'}}>
+              <p style={{fontSize:'14px',color:'#111827'}}>{a.label}</p>
+              <p style={{fontSize:'14px',fontWeight:'600',color:'#7C3AED'}}>₹{Number(a.amount).toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
         <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>ADD EXPENSE</p>
@@ -62,10 +77,10 @@ export default function ExpenseEntry() {
 
       {sortedDates.length > 0 && (
         <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
-          {sortedDates.map(date => (
-            <div key={date} style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
-              <p style={{fontSize:'13px',fontWeight:'700',color:'#2563EB',marginBottom:'12px'}}>{new Date(date).toLocaleDateString('en-IN', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
-              {groupedByDate[date].map(e => (
+          {sortedDates.map(d => (
+            <div key={d} style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
+              <p style={{fontSize:'13px',fontWeight:'700',color:'#2563EB',marginBottom:'12px'}}>{new Date(d).toLocaleDateString('en-IN', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+              {groupedByDate[d].map(e => (
                 <div key={e.id} style={{padding:'10px 0',borderBottom:'1px solid #F3F4F6'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <div>
@@ -89,7 +104,7 @@ export default function ExpenseEntry() {
                   </div>
                 </div>
               ))}
-              <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginTop:'12px',textAlign:'right'}}>Day total: ₹{groupedByDate[date].reduce((s,e) => s + e.amount, 0).toLocaleString()}</p>
+              <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginTop:'12px',textAlign:'right'}}>Day total: ₹{groupedByDate[d].reduce((s,e) => s+e.amount,0).toLocaleString()}</p>
             </div>
           ))}
           <button onClick={() => navigate('/personal/summary')} style={{background:'#7C3AED',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'14px',fontSize:'15px',fontWeight:'600',cursor:'pointer',width:'100%'}}>View Summary</button>

@@ -21,10 +21,9 @@ export default function BudgetSetup() {
   }, [month])
 
   const addRow = () => setAllocations([...allocations, { label: '', amount: '' }])
-
-  const updateRow = (index, field, value) => {
+  const updateRow = (i, field, value) => {
     const updated = [...allocations]
-    updated[index][field] = value
+    updated[i][field] = value
     setAllocations(updated)
   }
 
@@ -36,7 +35,10 @@ export default function BudgetSetup() {
 
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
-      <button onClick={() => navigate('/personal')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer',marginBottom:'24px'}}>← Back</button>
+      <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
+        <button onClick={() => navigate('/personal')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer'}}>← Back</button>
+        <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
+      </div>
       <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'24px'}}>Monthly Budget Setup</h1>
 
       {Object.keys(allMonths).length > 0 && (
@@ -44,7 +46,7 @@ export default function BudgetSetup() {
           <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>EXISTING MONTHS</p>
           <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
             {Object.keys(allMonths).map(m => (
-              <button key={m} onClick={() => setMonth(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background: month === m ? '#2563EB' : '#F3F4F6',color: month === m ? '#FFFFFF' : '#6B7280'}}>
+              <button key={m} onClick={() => setMonth(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:month===m?'#2563EB':'#F3F4F6',color:month===m?'#FFFFFF':'#6B7280'}}>
                 {m}
               </button>
             ))}
@@ -70,7 +72,7 @@ export default function BudgetSetup() {
             <input type="number" placeholder="Amount (₹)" value={row.amount} onChange={e => updateRow(i, 'amount', e.target.value)} style={{border:'1px solid #E5E7EB',borderRadius:'12px',padding:'12px',fontSize:'15px',outline:'none'}} />
           </div>
         ))}
-        <button onClick={addRow} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'10px 16px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',marginTop:'4px'}}>+ Add Row</button>
+        <button onClick={addRow} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'10px 16px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer'}}>+ Add Row</button>
       </div>
 
       <button onClick={save} style={{background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'14px',fontSize:'15px',fontWeight:'600',cursor:'pointer',width:'100%'}}>Save & Continue</button>

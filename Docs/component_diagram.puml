@@ -1,0 +1,31 @@
+@startuml
+
+package "Frontend (React)" {
+  [App.jsx]
+  [Auth Pages]
+  [Dashboard]
+  [Personal Module]
+  [Group Module]
+}
+
+package "State Management" {
+  [PersonalContext]
+  [GroupContext]
+}
+
+package "Backend Services" {
+  [Firebase Auth]
+  [Firestore DB]
+}
+
+[App.jsx] --> [Auth Pages]
+[App.jsx] --> [Dashboard]
+[App.jsx] --> [Personal Module]
+
+[Personal Module] --> [PersonalContext]
+[Group Module] --> [GroupContext]
+
+[PersonalContext] --> [Firestore DB]
+[Auth Pages] --> [Firebase Auth]
+
+@enduml

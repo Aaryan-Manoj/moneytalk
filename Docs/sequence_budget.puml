@@ -1,0 +1,19 @@
+@startuml
+
+actor User
+participant "BudgetSetup.jsx" as UI
+participant "PersonalContext" as Context
+participant "Firestore" as DB
+
+User -> UI : Enter month, total, allocations
+User -> UI : Click Save
+
+UI -> Context : setBudget(data)
+
+Context -> DB : setDoc()
+DB --> Context : success
+
+Context -> Context : update state
+Context --> UI : navigate("/personal")
+
+@enduml

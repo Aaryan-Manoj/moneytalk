@@ -12,7 +12,10 @@ export default function PersonalDashboard() {
 
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
-      <button onClick={() => navigate('/dashboard')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer',marginBottom:'24px'}}>← Back</button>
+      <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
+        <button onClick={() => navigate('/dashboard')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer'}}>← Back</button>
+        <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
+      </div>
       <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'24px'}}>Personal Finance</h1>
 
       {Object.keys(allMonths).length > 1 && (
@@ -20,7 +23,7 @@ export default function PersonalDashboard() {
           <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>SELECT MONTH</p>
           <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
             {Object.keys(allMonths).map(m => (
-              <button key={m} onClick={() => setActiveMonth(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background: activeMonth === m ? '#2563EB' : '#F3F4F6',color: activeMonth === m ? '#FFFFFF' : '#6B7280'}}>
+              <button key={m} onClick={() => setActiveMonth(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:activeMonth===m?'#2563EB':'#F3F4F6',color:activeMonth===m?'#FFFFFF':'#6B7280'}}>
                 {new Date(m + '-01').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
               </button>
             ))}

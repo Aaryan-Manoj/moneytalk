@@ -1,0 +1,25 @@
+@startuml
+
+start
+
+:User opens app;
+
+if (Has account?) then (No)
+  :Go to SignUp;
+  :Enter details;
+  :Create account;
+else (Yes)
+  :Go to Login;
+  :Enter credentials;
+endif
+
+:Authenticate via Firebase;
+
+if (Success?) then (Yes)
+  :Navigate to Dashboard;
+else (No)
+  :Show error;
+endif
+
+stop
+@enduml

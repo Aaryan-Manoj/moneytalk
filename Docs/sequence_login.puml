@@ -1,0 +1,20 @@
+@startuml
+
+actor User
+participant "Login.jsx" as UI
+participant "Firebase Auth" as Auth
+participant "Router" as Router
+
+User -> UI : Enter email/password
+User -> UI : Click Login
+
+UI -> Auth : signInWithEmailAndPassword()
+Auth --> UI : Success / Error
+
+alt Success
+  UI -> Router : navigate("/dashboard")
+else Error
+  UI -> User : Show error message
+end
+
+@enduml

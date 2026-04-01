@@ -1,0 +1,65 @@
+@startuml
+
+class User {
+  uid: string
+  name: string
+  email: string
+  username: string
+}
+
+class Budget {
+  month: string
+  total: number
+  allocations: Allocation[]
+}
+
+class Allocation {
+  label: string
+  amount: number
+}
+
+class Expense {
+  id: string
+  item: string
+  category: string
+  amount: number
+  date: string
+}
+
+class PersonalContext {
+  allMonths: Map
+  activeMonth: string
+  budget: Budget
+  expenses: Expense[]
+  
+  +setBudget()
+  +addExpense()
+  +deleteExpense()
+  +updateExpense()
+}
+
+class FirebaseAuth {
+  +signIn()
+  +signUp()
+  +logout()
+}
+
+class FirestoreDB {
+  +setDoc()
+  +getDocs()
+  +addDoc()
+  +deleteDoc()
+  +updateDoc()
+}
+
+User "1" --> "many" Budget
+Budget "1" --> "many" Allocation
+Budget "1" --> "many" Expense
+
+PersonalContext --> Budget
+PersonalContext --> Expense
+
+PersonalContext --> FirestoreDB
+User --> FirebaseAuth
+
+@enduml
