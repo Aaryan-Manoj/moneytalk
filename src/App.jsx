@@ -20,6 +20,7 @@ import CreateAccount from './pages/multiAccess/CreateAccount'
 import AccountDetail from './pages/multiAccess/AccountDetail'
 import SettlementCalc from './pages/multiAccess/SettlementCalc'
 import MonthEndSummary from './pages/monthEnd/MonthEndSummary'
+import JoinGroup from './pages/JoinGroup'
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
               <Route path="/multiaccess/:id" element={<AccountDetail />} />
               <Route path="/multiaccess/:id/settlement" element={<SettlementCalc />} />
               <Route path="/monthend" element={<MonthEndSummary />} />
+              <Route path="/join/:inviteId" element={<JoinGroup />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </MultiAccessProvider>

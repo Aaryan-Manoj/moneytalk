@@ -9,11 +9,11 @@ export default function SettlementView() {
   const [paid, setPaid] = useState({})
 
   const group = groups.find(g => g.id === id)
-  const settlement = getSettlement(id)
+  const { balances, transactions } = getSettlement(id)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
 
-  const togglePaid = (member) => setPaid(prev => ({ ...prev, [member]: !prev[member] }))
+  const togglePaid = (key) => setPaid(prev => ({ ...prev, [key]: !prev[key] }))
 
   if (!group) return <div style={{padding:'32px'}}>Group not found.</div>
 
@@ -33,32 +33,39 @@ export default function SettlementView() {
 
       <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
         <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>NET BALANCES</p>
-        {settlement.map(({ member, balance }) => (
+        {balances.map(({ member, balance }) => (
           <div key={member} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #F3F4F6'}}>
             <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{member}</p>
             <p style={{fontSize:'15px',fontWeight:'700',color:balance>0?'#10B981':balance<0?'#EF4444':'#6B7280'}}>
-              {balance>0?`+₹${balance}`:balance<0?`-₹${Math.abs(balance)}`:'Settled'}
+              {balance>0?`gets back ₹${balance}`:balance<0?`owes ₹${Math.abs(balance)}`:'Settled'}
             </p>
           </div>
         ))}
       </div>
 
       <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
-        <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>SETTLEMENT STATUS</p>
-        {settlement.filter(s => s.balance < 0).map(({ member, balance }) => (
-          <div key={member} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px',borderRadius:'12px',background:'#F9FAFB',marginBottom:'8px'}}>
-            <div>
-              <p style={{fontSize:'14px',fontWeight:'600',color:'#111827'}}>{member}</p>
-              <p style={{fontSize:'13px',color:'#6B7280'}}>Owes ₹{Math.abs(balance)}</p>
-            </div>
-            <button onClick={() => togglePaid(member)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:paid[member]?'#10B981':'#F3F4F6',color:paid[member]?'#FFFFFF':'#6B7280'}}>
-              {paid[member]?'Paid ✓':'Mark Paid'}
-            </button>
-          </div>
-        ))}
-        {settlement.filter(s => s.balance < 0).length === 0 && (
+        <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>WHO PAYS WHOM</p>
+        {transactions.length === 0 && (
           <p style={{color:'#10B981',fontSize:'15px',fontWeight:'600',textAlign:'center'}}>All settled! 🎉</p>
         )}
+        {transactions.map((t, i) => {
+          const key = `${t.from}-${t.to}`
+          return (
+            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px',borderRadius:'12px',background:'#F9FAFB',marginBottom:'8px'}}>
+              <div>
+                <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>
+                  <span style={{color:'#EF4444'}}>{t.from}</span>
+                  <span style={{color:'#6B7280'}}> owes </span>
+                  <span style={{color:'#10B981'}}>{t.to}</span>
+                </p>
+                <p style={{fontSize:'14px',fontWeight:'700',color:'#111827',marginTop:'2px'}}>₹{t.amount.toLocaleString()}</p>
+              </div>
+              <button onClick={() => togglePaid(key)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:paid[key]?'#10B981':'#F3F4F6',color:paid[key]?'#FFFFFF':'#6B7280'}}>
+                {paid[key]?'Paid ✓':'Mark Paid'}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
