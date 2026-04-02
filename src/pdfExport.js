@@ -177,7 +177,7 @@ export function exportGroupPDF(group, groupExpenses, settlement) {
 
 export function exportMultiAccessPDF(account, accExpenses, settlement) {
   const doc = new jsPDF()
-  let y = addHeader(doc, 'Shared Account Report', account.name)
+  let y = addHeader(doc, 'Multi-Access Account Report', account.name)
 
   doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'normal')
   doc.text(`Members: ${account.members.join(', ')}`, 14, y)
@@ -229,7 +229,6 @@ export function exportMultiAccessPDF(account, accExpenses, settlement) {
   doc.save(`MoneyTalk_MultiAccess_${account.name}.pdf`)
 }
 
-// ✅ Now async to support html2canvas for chart capture
 export async function exportMonthEndPDF(allMonths, selectedMonths, reportText) {
   const doc = new jsPDF()
   const getMonthLabel = (key) => new Date(key + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
@@ -268,7 +267,7 @@ export async function exportMonthEndPDF(allMonths, selectedMonths, reportText) {
     y += 8
   })
 
-  // ✅ Capture and embed the compare chart
+  // Capture and embed the compare chart
   const chartEl = document.getElementById('compare-chart')
   if (chartEl) {
     y = checkPage(doc, y, 100)
@@ -283,26 +282,40 @@ export async function exportMonthEndPDF(allMonths, selectedMonths, reportText) {
     }
   }
 
-  // ✅ Spending analysis report text
+  // ✅ Fixed: proper wrapping, Rs. symbol, and header detection
   if (reportText) {
     y = checkPage(doc, y, 30)
     y = addSectionTitle(doc, 'Spending Analysis', y)
+
     const lines = reportText.split('\n')
     lines.forEach(line => {
-      if (!line.trim()) { y += 3; return }
-      y = checkPage(doc, y)
-      const isHeader = line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅')
+      if (!line.trim()) { y += 4; return }
+
+      // Clean emojis and replace ₹ with Rs.
+      const cleanLine = line
+        .replace(/[📊📂💸📈🆕✅]/g, '')
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/₹/g, 'Rs.')
+        .trim()
+
+      if (!cleanLine) return
+
+      // Detect section headers by matching known titles after emoji removal
+      const isHeader = /^(Overall Summary|Category Breakdown|Biggest Spend Area|Month-over-Month|New Spending Areas|Dropped Categories)/.test(cleanLine)
+
       doc.setFontSize(isHeader ? 10 : 9)
       doc.setFont('helvetica', isHeader ? 'bold' : 'normal')
-      doc.setTextColor(isHeader ? 30 : 80, isHeader ? 30 : 80, isHeader ? 30 : 80)
-      // Strip emojis for PDF since jsPDF doesn't render them
-      const cleanLine = line.replace(/[\u{1F000}-\u{1FFFF}]/gu, '').replace(/📊|📂|💸|📈|🆕|✅/g, '').trim()
+      doc.setTextColor(isHeader ? 30 : 70, isHeader ? 30 : 70, isHeader ? 30 : 70)
+
+      // ✅ Wrap all lines to max 176mm width — nothing overflows
       const wrapped = doc.splitTextToSize(cleanLine, 176)
       wrapped.forEach(wl => {
         y = checkPage(doc, y)
         doc.text(wl, 16, y)
         y += isHeader ? 7 : 6
       })
+
+      if (isHeader) y += 2
     })
   }
 

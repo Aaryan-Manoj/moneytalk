@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { exportMonthEndPDF } from '../../pdfExport'
-import { useNavigate } from 'react-router-motion'
+import { useNavigate } from 'react-router-dom'
 import { usePersonal } from '../../context/PersonalContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 
