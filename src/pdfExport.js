@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const PRIMARY = '#2563EB'
 const SECONDARY = '#7C3AED'
@@ -228,13 +229,15 @@ export function exportMultiAccessPDF(account, accExpenses, settlement) {
   doc.save(`MoneyTalk_MultiAccess_${account.name}.pdf`)
 }
 
-export function exportMonthEndPDF(allMonths, selectedMonths) {
+// ✅ Now async to support html2canvas for chart capture
+export async function exportMonthEndPDF(allMonths, selectedMonths, reportText) {
   const doc = new jsPDF()
   const getMonthLabel = (key) => new Date(key + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
   const getTotal = (key) => (allMonths[key]?.expenses || []).reduce((s, e) => s + Number(e.amount), 0)
 
   let y = addHeader(doc, 'Month End Summary Report', selectedMonths.map(getMonthLabel).join(' vs '))
 
+  // Per-month breakdown
   selectedMonths.forEach(month => {
     const exps = allMonths[month]?.expenses || []
     const total = getTotal(month)
@@ -265,21 +268,41 @@ export function exportMonthEndPDF(allMonths, selectedMonths) {
     y += 8
   })
 
-  if (selectedMonths.length >= 2) {
+  // ✅ Capture and embed the compare chart
+  const chartEl = document.getElementById('compare-chart')
+  if (chartEl) {
+    y = checkPage(doc, y, 100)
+    y = addSectionTitle(doc, 'Spending Comparison Chart', y)
+    try {
+      const canvas = await html2canvas(chartEl, { backgroundColor: '#ffffff', scale: 2 })
+      const imgData = canvas.toDataURL('image/png')
+      doc.addImage(imgData, 'PNG', 14, y, 182, 80)
+      y += 88
+    } catch (e) {
+      console.error('Chart capture failed:', e)
+    }
+  }
+
+  // ✅ Spending analysis report text
+  if (reportText) {
     y = checkPage(doc, y, 30)
-    y = addSectionTitle(doc, 'Comparison Analysis', y)
-    const cats = new Set(selectedMonths.flatMap(m => (allMonths[m]?.expenses || []).map(e => e.category)))
-    cats.forEach(cat => {
-      const values = selectedMonths.map(m => ({
-        label: getMonthLabel(m),
-        amount: (allMonths[m]?.expenses || []).filter(e => e.category === cat).reduce((s, e) => s + Number(e.amount), 0)
-      })).sort((a, b) => b.amount - a.amount)
-      if (values[0].amount > 0) {
+    y = addSectionTitle(doc, 'Spending Analysis', y)
+    const lines = reportText.split('\n')
+    lines.forEach(line => {
+      if (!line.trim()) { y += 3; return }
+      y = checkPage(doc, y)
+      const isHeader = line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅')
+      doc.setFontSize(isHeader ? 10 : 9)
+      doc.setFont('helvetica', isHeader ? 'bold' : 'normal')
+      doc.setTextColor(isHeader ? 30 : 80, isHeader ? 30 : 80, isHeader ? 30 : 80)
+      // Strip emojis for PDF since jsPDF doesn't render them
+      const cleanLine = line.replace(/[\u{1F000}-\u{1FFFF}]/gu, '').replace(/📊|📂|💸|📈|🆕|✅/g, '').trim()
+      const wrapped = doc.splitTextToSize(cleanLine, 176)
+      wrapped.forEach(wl => {
         y = checkPage(doc, y)
-        doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
-        doc.text(`${cat}: Highest in ${values[0].label} at Rs.${values[0].amount.toLocaleString()}`, 16, y)
-        y += 7
-      }
+        doc.text(wl, 16, y)
+        y += isHeader ? 7 : 6
+      })
     })
   }
 

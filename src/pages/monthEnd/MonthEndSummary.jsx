@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { exportMonthEndPDF } from '../../pdfExport'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-motion'
 import { usePersonal } from '../../context/PersonalContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 
@@ -54,18 +54,96 @@ export default function MonthEndSummary() {
   const generateReport = () => {
     if (activeCompare.length < 2) return ''
     const lines = []
+
+    const totals = activeCompare.map(m => ({ label: getMonthLabel(m), total: getTotal(m), key: m })).sort((a, b) => b.total - a.total)
+    const highest = totals[0]
+    const lowest = totals[totals.length - 1]
+    const diffAmount = highest.total - lowest.total
+    const diffPercent = lowest.total > 0 ? ((diffAmount / lowest.total) * 100).toFixed(0) : 'N/A'
+
+    // Overall summary
+    lines.push(`📊 Overall Summary`)
+    lines.push(`Your total spending was highest in ${highest.label} at ₹${highest.total.toLocaleString()} and lowest in ${lowest.label} at ₹${lowest.total.toLocaleString()}. That's a difference of ₹${diffAmount.toLocaleString()}${diffPercent !== 'N/A' ? ` — about ${diffPercent}% more` : ''}.`)
+    lines.push(``)
+
+    // Category breakdown
+    lines.push(`📂 Category Breakdown`)
     const cats = new Set(activeCompare.flatMap(m => getCategoryData(m).map(d => d.category)))
+    const categoryInsights = []
+
     cats.forEach(cat => {
-      const values = activeCompare.map(m => ({ label: getMonthLabel(m), amount: getCategoryData(m).find(d => d.category === cat)?.amount || 0 }))
+      const values = activeCompare.map(m => ({
+        label: getMonthLabel(m),
+        amount: getCategoryData(m).find(d => d.category === cat)?.amount || 0
+      }))
       const sorted = [...values].sort((a, b) => b.amount - a.amount)
-      if (sorted[0].amount > 0 && sorted[0].amount !== sorted[sorted.length-1].amount) {
-        lines.push(`• ${cat}: ${sorted[0].label} had the highest spend at ₹${sorted[0].amount.toLocaleString()}, compared to ₹${sorted[sorted.length-1].amount.toLocaleString()} in ${sorted[sorted.length-1].label}.`)
-      } else if (sorted[0].amount > 0) {
-        lines.push(`• ${cat}: Spend was equal across all selected months at ₹${sorted[0].amount.toLocaleString()}.`)
+      const max = sorted[0]
+      const min = sorted[sorted.length - 1]
+      const catDiff = max.amount - min.amount
+      const catPercent = min.amount > 0 ? ((catDiff / min.amount) * 100).toFixed(0) : null
+      const totalAcrossMonths = values.reduce((s, v) => s + v.amount, 0)
+
+      if (max.amount === 0) return
+
+      if (max.amount === min.amount) {
+        categoryInsights.push({ cat, line: `• ${cat}: You spent exactly ₹${max.amount.toLocaleString()} every month here — very consistent!`, total: totalAcrossMonths })
+      } else if (catPercent !== null) {
+        const trend = catDiff > 0 ? `went up by ${catPercent}%` : `stayed close`
+        categoryInsights.push({ cat, line: `• ${cat}: Spending ${trend} — ₹${min.amount.toLocaleString()} in ${min.label} vs ₹${max.amount.toLocaleString()} in ${max.label} (₹${catDiff.toLocaleString()} difference).`, total: totalAcrossMonths })
+      } else {
+        categoryInsights.push({ cat, line: `• ${cat}: Only spent in ${max.label} — ₹${max.amount.toLocaleString()}.`, total: totalAcrossMonths })
       }
     })
-    const totals = activeCompare.map(m => ({ label: getMonthLabel(m), total: getTotal(m) })).sort((a, b) => b.total - a.total)
-    lines.unshift(`Overall: ${totals[0].label} had the highest total spend at ₹${totals[0].total.toLocaleString()}.`)
+
+    // Sort categories by total spend descending so biggest spends come first
+    categoryInsights.sort((a, b) => b.total - a.total)
+    categoryInsights.forEach(c => lines.push(c.line))
+    lines.push(``)
+
+    // Biggest spender category
+    if (categoryInsights.length > 0) {
+      lines.push(`💸 Biggest Spend Area`)
+      lines.push(`Your highest spending category overall was "${categoryInsights[0].cat}" — worth keeping an eye on if you're trying to cut costs.`)
+      lines.push(``)
+    }
+
+    // Month-over-month change
+    if (activeCompare.length === 2) {
+      const [m1, m2] = activeCompare
+      const t1 = getTotal(m1)
+      const t2 = getTotal(m2)
+      const change = t2 - t1
+      const changePct = t1 > 0 ? ((Math.abs(change) / t1) * 100).toFixed(0) : null
+      lines.push(`📈 Month-over-Month`)
+      if (change > 0) {
+        lines.push(`You spent ₹${Math.abs(change).toLocaleString()}${changePct ? ` (${changePct}%)` : ''} more in ${getMonthLabel(m2)} compared to ${getMonthLabel(m1)}. Your expenses went up.`)
+      } else if (change < 0) {
+        lines.push(`Great news — you spent ₹${Math.abs(change).toLocaleString()}${changePct ? ` (${changePct}%)` : ''} less in ${getMonthLabel(m2)} compared to ${getMonthLabel(m1)}. You're trending in the right direction!`)
+      } else {
+        lines.push(`Your total spending was identical across both months at ₹${t1.toLocaleString()}.`)
+      }
+      lines.push(``)
+    }
+
+    // New categories that appeared
+    if (activeCompare.length === 2) {
+      const [m1, m2] = activeCompare
+      const cats1 = new Set(getCategoryData(m1).map(d => d.category))
+      const cats2 = new Set(getCategoryData(m2).map(d => d.category))
+      const newCats = [...cats2].filter(c => !cats1.has(c))
+      const droppedCats = [...cats1].filter(c => !cats2.has(c))
+      if (newCats.length > 0) {
+        lines.push(`🆕 New Spending Areas`)
+        lines.push(`You started spending on ${newCats.join(', ')} in ${getMonthLabel(m2)} — categories that didn't appear in ${getMonthLabel(m1)}.`)
+        lines.push(``)
+      }
+      if (droppedCats.length > 0) {
+        lines.push(`✅ Dropped Categories`)
+        lines.push(`You stopped spending on ${droppedCats.join(', ')} compared to ${getMonthLabel(m1)} — whether intentional or not, that saved you some money.`)
+        lines.push(``)
+      }
+    }
+
     return lines.join('\n')
   }
 
@@ -169,18 +247,21 @@ export default function MonthEndSummary() {
                 </div>
 
                 {getCompareData().length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={getCompareData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                      <XAxis dataKey="category" tick={{fontSize:11,fill:'#6B7280'}} />
-                      <YAxis tick={{fontSize:11,fill:'#6B7280'}} />
-                      <Tooltip formatter={v => [`₹${v}`]} />
-                      <Legend />
-                      {activeCompare.map((m, i) => (
-                        <Bar key={m} dataKey={getMonthLabel(m)} fill={COLORS[i]} radius={[6,6,0,0]} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
+                  // ✅ Added id so exportMonthEndPDF can capture this chart
+                  <div id="compare-chart">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={getCompareData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                        <XAxis dataKey="category" tick={{fontSize:11,fill:'#6B7280'}} />
+                        <YAxis tick={{fontSize:11,fill:'#6B7280'}} />
+                        <Tooltip formatter={v => [`₹${v}`]} />
+                        <Legend />
+                        {activeCompare.map((m, i) => (
+                          <Bar key={m} dataKey={getMonthLabel(m)} fill={COLORS[i]} radius={[6,6,0,0]} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 ) : (
                   <p style={{color:'#6B7280',fontSize:'14px',textAlign:'center',padding:'24px'}}>No expense data to compare.</p>
                 )}
@@ -193,14 +274,21 @@ export default function MonthEndSummary() {
                   <div style={{background:'#F9FAFB',borderRadius:'12px',padding:'20px',marginTop:'12px'}}>
                     <p style={{fontSize:'13px',fontWeight:'700',color:'#111827',marginBottom:'12px'}}>SPENDING ANALYSIS</p>
                     {generateReport().split('\n').map((line, i) => (
-                      <p key={i} style={{fontSize:'14px',color:'#374151',marginBottom:'8px',lineHeight:'1.6'}}>{line}</p>
+                      <p key={i} style={{
+                        fontSize: line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅') ? '13px' : '14px',
+                        fontWeight: line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅') ? '700' : '400',
+                        color: line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅') ? '#111827' : '#374151',
+                        marginBottom:'6px',
+                        lineHeight:'1.6',
+                        marginTop: line.startsWith('📊') || line.startsWith('📂') || line.startsWith('💸') || line.startsWith('📈') || line.startsWith('🆕') || line.startsWith('✅') ? '12px' : '0'
+                      }}>{line}</p>
                     ))}
                   </div>
                 )}
 
                 {/* ✅ Export PDF button */}
                 {activeCompare.length >= 1 && (
-                  <button onClick={() => exportMonthEndPDF(allMonths, activeCompare)} style={{background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',cursor:'pointer',width:'100%',marginTop:'12px'}}>⬇ Export Report as PDF</button>
+                  <button onClick={() => exportMonthEndPDF(allMonths, activeCompare, generateReport())} style={{background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',cursor:'pointer',width:'100%',marginTop:'12px'}}>⬇ Export Report as PDF</button>
                 )}
               </>
             )}
