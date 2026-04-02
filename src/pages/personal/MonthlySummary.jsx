@@ -49,7 +49,7 @@ export default function MonthlySummary() {
       </div>
 
       {/* ✅ Export PDF button — after stat cards */}
-      <button onClick={() => exportMultiAccessPDF(account, accExpenses, settlement)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
+      <button onClick={() => exportPersonalPDF(budget, expenses)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
 
       <div style={{display:'grid',gridTemplateColumns:selectedCategory?'1fr 1fr':'1fr',gap:'16px'}}>
         <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
@@ -97,7 +97,7 @@ export default function MonthlySummary() {
       </div>
 
       {/* ✅ Export PDF button — bottom of page */}
-      <button onClick={() => exportMultiAccessPDF(account, accExpenses, settlement)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
+      <button onClick={() => exportPersonalPDF(budget, expenses)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
 
     </div>
   )
