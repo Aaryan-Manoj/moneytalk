@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { exportMonthEndPDF } from '../../pdfExport'
 import { useNavigate } from 'react-router-dom'
 import { usePersonal } from '../../context/PersonalContext'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 
 const COLORS = ['#2563EB', '#7C3AED', '#0EA5E9', '#8B5CF6', '#3B82F6', '#6D28D9']
 
@@ -11,11 +12,12 @@ export default function MonthEndSummary() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [compareMonths, setCompareMonths] = useState(['', ''])
   const [showReport, setShowReport] = useState(false)
+  const [showTrend, setShowTrend] = useState(false)
 
-  const monthKeys = Object.keys(allMonths)
+  const monthKeys = Object.keys(allMonths).sort()
 
   const getMonthLabel = (key) => key
-    ? new Date(key + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+    ? new Date(key + '-01').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
     : ''
 
   const getTotal = (key) => {
@@ -40,11 +42,13 @@ export default function MonthEndSummary() {
     const cats = new Set(activeCompare.flatMap(m => getCategoryData(m).map(d => d.category)))
     return Array.from(cats).map(cat => {
       const row = { category: cat }
-      activeCompare.forEach(m => {
-        row[getMonthLabel(m)] = getCategoryData(m).find(d => d.category === cat)?.amount || 0
-      })
+      activeCompare.forEach(m => { row[getMonthLabel(m)] = getCategoryData(m).find(d => d.category === cat)?.amount || 0 })
       return row
     })
+  }
+
+  const getTrendData = () => {
+    return monthKeys.map(k => ({ month: getMonthLabel(k), total: getTotal(k) }))
   }
 
   const generateReport = () => {
@@ -52,12 +56,9 @@ export default function MonthEndSummary() {
     const lines = []
     const cats = new Set(activeCompare.flatMap(m => getCategoryData(m).map(d => d.category)))
     cats.forEach(cat => {
-      const values = activeCompare.map(m => ({
-        label: getMonthLabel(m),
-        amount: getCategoryData(m).find(d => d.category === cat)?.amount || 0
-      }))
+      const values = activeCompare.map(m => ({ label: getMonthLabel(m), amount: getCategoryData(m).find(d => d.category === cat)?.amount || 0 }))
       const sorted = [...values].sort((a, b) => b.amount - a.amount)
-      if (sorted[0].amount > 0 && sorted[0].amount !== sorted[sorted.length - 1].amount) {
+      if (sorted[0].amount > 0 && sorted[0].amount !== sorted[sorted.length-1].amount) {
         lines.push(`• ${cat}: ${sorted[0].label} had the highest spend at ₹${sorted[0].amount.toLocaleString()}, compared to ₹${sorted[sorted.length-1].amount.toLocaleString()} in ${sorted[sorted.length-1].label}.`)
       } else if (sorted[0].amount > 0) {
         lines.push(`• ${cat}: Spend was equal across all selected months at ₹${sorted[0].amount.toLocaleString()}.`)
@@ -69,11 +70,7 @@ export default function MonthEndSummary() {
   }
 
   const addCompareMonth = () => setCompareMonths(prev => [...prev, ''])
-  const updateCompareMonth = (i, val) => {
-    const updated = [...compareMonths]
-    updated[i] = val
-    setCompareMonths(updated)
-  }
+  const updateCompareMonth = (i, val) => { const u = [...compareMonths]; u[i] = val; setCompareMonths(u) }
   const removeCompareMonth = (i) => setCompareMonths(prev => prev.filter((_, idx) => idx !== i))
 
   return (
@@ -90,6 +87,26 @@ export default function MonthEndSummary() {
         </div>
       ) : (
         <>
+          {monthKeys.length >= 2 && (
+            <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'24px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+                <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280'}}>SPENDING TREND — ALL MONTHS</p>
+                <button onClick={() => setShowTrend(!showTrend)} style={{background:'#EFF6FF',border:'none',borderRadius:'8px',padding:'6px 14px',fontSize:'13px',fontWeight:'600',color:'#2563EB',cursor:'pointer'}}>{showTrend?'Hide':'Show'} Trend</button>
+              </div>
+              {showTrend && (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={getTrendData()}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="month" tick={{fontSize:11,fill:'#6B7280'}} />
+                    <YAxis tick={{fontSize:11,fill:'#6B7280'}} />
+                    <Tooltip formatter={v => [`₹${v.toLocaleString()}`, 'Total Spent']} />
+                    <Line type="monotone" dataKey="total" stroke="#2563EB" strokeWidth={3} dot={{fill:'#2563EB',r:5}} activeDot={{r:7}} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          )}
+
           <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'24px'}}>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>SECTION 1 — SINGLE MONTH</p>
             <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{border:'1px solid #E5E7EB',borderRadius:'12px',padding:'12px',fontSize:'15px',outline:'none',width:'100%',background:'#FFFFFF',marginBottom:'16px'}}>
@@ -126,7 +143,7 @@ export default function MonthEndSummary() {
               <button onClick={addCompareMonth} style={{background:'#EFF6FF',border:'none',borderRadius:'8px',padding:'6px 14px',fontSize:'13px',fontWeight:'600',color:'#2563EB',cursor:'pointer'}}>+ Add Month</button>
             </div>
 
-            <div style={{display:'grid',gridTemplateColumns:`repeat(${compareMonths.length}, 1fr)`,gap:'12px',marginBottom:'16px'}}>
+            <div style={{display:'grid',gridTemplateColumns:`repeat(${compareMonths.length},1fr)`,gap:'12px',marginBottom:'16px'}}>
               {compareMonths.map((m, i) => (
                 <div key={i} style={{display:'flex',gap:'6px',alignItems:'center'}}>
                   <select value={m} onChange={e => updateCompareMonth(i, e.target.value)} style={{border:'1px solid #E5E7EB',borderRadius:'12px',padding:'10px',fontSize:'13px',outline:'none',background:'#FFFFFF',flex:1}}>
@@ -142,7 +159,7 @@ export default function MonthEndSummary() {
 
             {activeCompare.length >= 2 && (
               <>
-                <div style={{display:'grid',gridTemplateColumns:`repeat(${activeCompare.length}, 1fr)`,gap:'12px',marginBottom:'16px'}}>
+                <div style={{display:'grid',gridTemplateColumns:`repeat(${activeCompare.length},1fr)`,gap:'12px',marginBottom:'16px'}}>
                   {activeCompare.map((m, i) => (
                     <div key={m} style={{background:COLORS[i],borderRadius:'12px',padding:'16px'}}>
                       <p style={{fontSize:'12px',color:'rgba(255,255,255,0.7)',marginBottom:'4px'}}>{getMonthLabel(m)}</p>
@@ -169,7 +186,7 @@ export default function MonthEndSummary() {
                 )}
 
                 <button onClick={() => setShowReport(!showReport)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>
-                  {showReport ? 'Hide Report ▲' : 'Show Spending Report ▼'}
+                  {showReport?'Hide Report ▲':'Show Spending Report ▼'}
                 </button>
 
                 {showReport && (
@@ -179,6 +196,11 @@ export default function MonthEndSummary() {
                       <p key={i} style={{fontSize:'14px',color:'#374151',marginBottom:'8px',lineHeight:'1.6'}}>{line}</p>
                     ))}
                   </div>
+                )}
+
+                {/* ✅ Export PDF button */}
+                {activeCompare.length >= 1 && (
+                  <button onClick={() => exportMonthEndPDF(allMonths, activeCompare)} style={{background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',cursor:'pointer',width:'100%',marginTop:'12px'}}>⬇ Export Report as PDF</button>
                 )}
               </>
             )}

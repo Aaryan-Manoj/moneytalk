@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { exportMultiAccessPDF } from '../../pdfExport'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMultiAccess } from '../../context/MultiAccessContext'
 
@@ -70,6 +71,10 @@ export default function SettlementCalc() {
           <p style={{color:'#10B981',fontSize:'15px',fontWeight:'600',textAlign:'center'}}>All settled! 🎉</p>
         )}
       </div>
+
+      {/* ✅ Export PDF button */}
+      <button onClick={() => exportMultiAccessPDF(account, accExpenses, settlement)} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
+
     </div>
   )
 }

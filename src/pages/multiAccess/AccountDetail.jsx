@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMultiAccess } from '../../context/MultiAccessContext'
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+
+const COLORS = ['#2563EB', '#7C3AED', '#0EA5E9', '#8B5CF6', '#3B82F6', '#6D28D9']
 
 export default function AccountDetail() {
   const navigate = useNavigate()
@@ -21,6 +24,13 @@ export default function AccountDetail() {
   const [newMember, setNewMember] = useState('')
   const [showEditBudget, setShowEditBudget] = useState(false)
   const [newBudget, setNewBudget] = useState('')
+  const [showChart, setShowChart] = useState(false)
+
+  const spendingByMember = account ? account.members.map((m, i) => ({
+    name: m,
+    value: accExpenses.filter(e => e.paidBy === m).reduce((s, e) => s + Number(e.amount), 0),
+    color: COLORS[i % COLORS.length]
+  })).filter(d => d.value > 0) : []
 
   const save = async () => {
     if (!desc || !amount || !date || !paidBy) return
@@ -70,6 +80,9 @@ export default function AccountDetail() {
       <div style={{display:'flex',gap:'12px',marginBottom:'16px'}}>
         <button onClick={() => setShowAddUser(!showAddUser)} style={{flex:1,background:'#FFFFFF',border:'2px solid #2563EB',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#2563EB',cursor:'pointer'}}>+ Add User</button>
         <button onClick={() => setShowEditBudget(!showEditBudget)} style={{flex:1,background:'#FFFFFF',border:'2px solid #7C3AED',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#7C3AED',cursor:'pointer'}}>Edit Budget</button>
+        {spendingByMember.length > 0 && (
+          <button onClick={() => setShowChart(!showChart)} style={{flex:1,background:'#FFFFFF',border:'2px solid #0EA5E9',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#0EA5E9',cursor:'pointer'}}>📊 Spending</button>
+        )}
       </div>
 
       {showAddUser && (
@@ -83,6 +96,22 @@ export default function AccountDetail() {
         <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px',display:'flex',gap:'12px'}}>
           <input type="number" placeholder="New budget amount" value={newBudget} onChange={e => setNewBudget(e.target.value)} style={{border:'1px solid #E5E7EB',borderRadius:'12px',padding:'12px',fontSize:'15px',outline:'none',flex:1}} />
           <button onClick={saveBudget} style={{background:'#7C3AED',color:'#FFFFFF',border:'none',borderRadius:'12px',padding:'12px 20px',fontSize:'14px',fontWeight:'600',cursor:'pointer'}}>Save</button>
+        </div>
+      )}
+
+      {showChart && spendingByMember.length > 0 && (
+        <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
+          <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>WHO SPENT THE MOST</p>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={spendingByMember} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({name,percent}) => `${name} ${(percent*100).toFixed(0)}%`}>
+                {spendingByMember.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={v => [`₹${v.toLocaleString()}`, 'Spent']} />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -107,12 +136,13 @@ export default function AccountDetail() {
       {accExpenses.length > 0 && (
         <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
           <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>EXPENSE LOG</p>
-          {accExpenses.map(e => (
+          {[...accExpenses].sort((a,b) => new Date(a.date)-new Date(b.date)).map(e => (
             <div key={e.id} style={{padding:'12px 0',borderBottom:'1px solid #F3F4F6'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                 <div style={{flex:1}}>
                   <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{e.desc}</p>
-                  <p style={{fontSize:'13px',color:'#6B7280'}}>{e.date} · {e.paidBy}</p>
+                  <p style={{fontSize:'13px',color:'#2563EB',fontWeight:'600'}}>{new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</p>
+                  <p style={{fontSize:'13px',color:'#6B7280'}}>{e.paidBy}</p>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:'8px',marginLeft:'12px'}}>
                   {editId === e.id ? (

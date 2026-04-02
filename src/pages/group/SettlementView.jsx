@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { exportGroupPDF } from '../../pdfExport'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useGroup } from '../../context/GroupContext'
 
@@ -12,6 +13,12 @@ export default function SettlementView() {
   const { balances, transactions } = getSettlement(id)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
+
+  const memberTotals = {}
+  if (group) {
+    group.members.forEach(m => memberTotals[m] = 0)
+    groupExpenses.forEach(e => { memberTotals[e.paidBy] = (memberTotals[e.paidBy] || 0) + e.amount })
+  }
 
   const togglePaid = (key) => setPaid(prev => ({ ...prev, [key]: !prev[key] }))
 
@@ -29,6 +36,16 @@ export default function SettlementView() {
       <div style={{background:'#2563EB',borderRadius:'16px',padding:'20px',marginBottom:'24px'}}>
         <p style={{fontSize:'13px',color:'rgba(255,255,255,0.7)',marginBottom:'4px'}}>TOTAL GROUP EXPENSES</p>
         <p style={{fontSize:'28px',fontWeight:'700',color:'#FFFFFF'}}>₹{total.toLocaleString()}</p>
+      </div>
+
+      <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
+        <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>TOTAL PAID PER MEMBER</p>
+        {Object.entries(memberTotals).map(([member, amount]) => (
+          <div key={member} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #F3F4F6'}}>
+            <p style={{fontSize:'14px',fontWeight:'600',color:'#111827'}}>{member}</p>
+            <p style={{fontSize:'14px',fontWeight:'700',color:'#2563EB'}}>₹{amount.toLocaleString()}</p>
+          </div>
+        ))}
       </div>
 
       <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
@@ -67,6 +84,10 @@ export default function SettlementView() {
           )
         })}
       </div>
+
+      {/* ✅ Export PDF button */}
+      <button onClick={() => exportGroupPDF(group, groupExpenses, {balances, transactions})} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
+
     </div>
   )
 }

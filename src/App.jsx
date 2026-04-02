@@ -7,6 +7,7 @@ import Landing from './pages/auth/Landing'
 import SignUp from './pages/auth/SignUp'
 import Login from './pages/auth/Login'
 import Dashboard from './pages/Dashboard'
+import Profile from './pages/Profile'
 import PersonalDashboard from './pages/personal/PersonalDashboard'
 import BudgetSetup from './pages/personal/BudgetSetup'
 import ExpenseEntry from './pages/personal/ExpenseEntry'
@@ -33,6 +34,7 @@ function App() {
               <Route path="/signup" element={<SignUp />} />
               <Route path="/login" element={<Login />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/personal" element={<PersonalDashboard />} />
               <Route path="/personal/budget" element={<BudgetSetup />} />
               <Route path="/personal/expenses" element={<ExpenseEntry />} />

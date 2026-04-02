@@ -8,7 +8,7 @@ export default function GroupExpenseEntry() {
   const { groups, addGroupExpense, deleteGroupExpense, updateGroupExpense, expenses } = useGroup()
 
   const group = groups.find(g => g.id === id)
-  const groupExpenses = expenses[id] || []
+  const groupExpenses = [...(expenses[id] || [])].sort((a, b) => new Date(a.date) - new Date(b.date))
 
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
@@ -84,17 +84,17 @@ export default function GroupExpenseEntry() {
 
       {groupExpenses.length > 0 && (
         <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
-          <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>LOGGED EXPENSES</p>
+          <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>LOGGED EXPENSES — sorted by date</p>
           {groupExpenses.map(e => (
             <div key={e.id} style={{padding:'12px 0',borderBottom:'1px solid #F3F4F6'}}>
               {editId === e.id ? (
                 <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-                  <input type="number" value={editData.amount} onChange={ev => setEditData(p => ({...p, amount: ev.target.value}))} style={{border:'1px solid #E5E7EB',borderRadius:'8px',padding:'8px',fontSize:'14px',outline:'none'}} />
+                  <input type="number" value={editData.amount} onChange={ev => setEditData(p => ({...p,amount:ev.target.value}))} style={{border:'1px solid #E5E7EB',borderRadius:'8px',padding:'8px',fontSize:'14px',outline:'none'}} />
                   <div>
                     <p style={{fontSize:'12px',fontWeight:'600',color:'#6B7280',marginBottom:'6px'}}>PAID BY</p>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
                       {group.members.map(m => (
-                        <button key={m} onClick={() => setEditData(p => ({...p, paidBy: m}))} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.paidBy===m?'#2563EB':'#F3F4F6',color:editData.paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
+                        <button key={m} onClick={() => setEditData(p => ({...p,paidBy:m}))} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.paidBy===m?'#2563EB':'#F3F4F6',color:editData.paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
                       ))}
                     </div>
                   </div>
@@ -115,8 +115,8 @@ export default function GroupExpenseEntry() {
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div style={{flex:1}}>
                     <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{e.desc}</p>
-                    <p style={{fontSize:'13px',color:'#6B7280'}}>{e.date} · Paid by {e.paidBy}</p>
-                    <p style={{fontSize:'12px',color:'#9CA3AF',marginTop:'2px'}}>Split: {e.splitAmong.join(', ')}</p>
+                    <p style={{fontSize:'13px',color:'#2563EB',fontWeight:'600'}}>{new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</p>
+                    <p style={{fontSize:'13px',color:'#6B7280'}}>Paid by {e.paidBy} · Split: {e.splitAmong.join(', ')}</p>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginLeft:'12px'}}>
                     <p style={{fontSize:'15px',fontWeight:'700',color:'#111827'}}>₹{e.amount}</p>

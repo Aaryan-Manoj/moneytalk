@@ -10,6 +10,11 @@ export default function PersonalDashboard() {
     ? new Date(activeMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
     : ''
 
+  const totalAfterAllocations = budget.total - (budget.allocations || []).reduce((s, a) => s + Number(a.amount || 0), 0)
+  const warningThreshold = totalAfterAllocations * 0.2
+  const showWarning = hasBudget && remaining <= warningThreshold && remaining >= 0
+  const showOverspent = hasBudget && remaining < 0
+
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
       <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
@@ -31,9 +36,23 @@ export default function PersonalDashboard() {
         </div>
       )}
 
+      {showOverspent && (
+        <div style={{background:'#FEE2E2',borderRadius:'12px',padding:'16px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px'}}>
+          <span style={{fontSize:'20px'}}>🚨</span>
+          <p style={{fontSize:'14px',fontWeight:'600',color:'#EF4444'}}>You have overspent your budget for {monthLabel}!</p>
+        </div>
+      )}
+
+      {showWarning && !showOverspent && (
+        <div style={{background:'#FEF3C7',borderRadius:'12px',padding:'16px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'12px'}}>
+          <span style={{fontSize:'20px'}}>⚠️</span>
+          <p style={{fontSize:'14px',fontWeight:'600',color:'#92400E'}}>Less than 20% of your balance remaining. Spend carefully!</p>
+        </div>
+      )}
+
       {hasBudget ? (
         <>
-          <div style={{background:'#2563EB',borderRadius:'16px',padding:'24px',marginBottom:'16px'}}>
+          <div style={{background: showOverspent ? '#EF4444' : showWarning ? '#F59E0B' : '#2563EB',borderRadius:'16px',padding:'24px',marginBottom:'16px'}}>
             <p style={{fontSize:'13px',color:'rgba(255,255,255,0.7)',marginBottom:'4px'}}>AVAILABLE BALANCE</p>
             <p style={{fontSize:'32px',fontWeight:'700',color:'#FFFFFF'}}>₹{remaining.toLocaleString()}</p>
             <p style={{fontSize:'13px',color:'rgba(255,255,255,0.7)',marginTop:'4px'}}>{monthLabel}</p>
