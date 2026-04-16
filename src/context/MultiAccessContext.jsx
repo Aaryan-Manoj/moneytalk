@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase'
-import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, query, where } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 
 const MultiAccessContext = createContext()
@@ -39,8 +39,8 @@ export function MultiAccessProvider({ children }) {
     const data = {
       name,
       members: ['Me', ...memberNames],
-      memberUids: [uid, ...memberUids],
-      pendingMembers: memberNames.filter((_, i) => memberUids[i] !== null),
+      memberUids: [uid, ...memberUids.filter(u => u)],
+      pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
       budget: Number(budget),
       createdBy: uid,
@@ -51,8 +51,8 @@ export function MultiAccessProvider({ children }) {
     const accountId = ref.id
 
     for (let i = 0; i < memberNames.length; i++) {
-      const memberName = memberNames[i]
       const memberUid = memberUids[i]
+      const memberName = memberNames[i]
       if (memberUid) {
         await addDoc(collection(db, 'notifications'), {
           toUid: memberUid,
@@ -74,7 +74,7 @@ export function MultiAccessProvider({ children }) {
   }
 
   const acceptAccountInvite = async (notification) => {
-    const { groupId, ownerUid, toName } = notification
+    const { groupId, ownerUid, toName, toUid } = notification
     const ref = doc(db, 'users', ownerUid, 'multiAccess', groupId)
     const snap = await getDoc(ref)
     if (!snap.exists()) return
@@ -82,7 +82,15 @@ export function MultiAccessProvider({ children }) {
     const newPending = (data.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
     await updateDoc(ref, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
-    setAccounts(prev => prev.map(a => a.id === groupId ? { ...a, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : a))
+
+    const myData = { ...data, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting', ownerUid, isShared: true }
+    await setDoc(doc(db, 'users', toUid, 'multiAccess', groupId), myData)
+
+    setAccounts(prev => {
+      const existing = prev.find(a => a.id === groupId)
+      if (existing) return prev.map(a => a.id === groupId ? { ...a, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : a)
+      return [...prev, { id: groupId, ...myData }]
+    })
   }
 
   const declineAccountInvite = async (notification) => {
@@ -108,9 +116,45 @@ export function MultiAccessProvider({ children }) {
     await deleteDoc(ref)
   }
 
+  const deleteAccount = async (accountId) => {
+    const account = accounts.find(a => a.id === accountId)
+    if (!account) return
+    const ownerUid = account.ownerUid || uid
+
+    for (const memberName of account.members) {
+      if (memberName !== 'Me') {
+        await addDoc(collection(db, 'notifications'), {
+          toName: memberName,
+          fromName: currentUser?.displayName || 'Someone',
+          groupId: accountId,
+          groupName: account.name,
+          type: 'group_deleted',
+          feature: 'multiAccess',
+          read: false,
+          createdAt: new Date().toISOString()
+        })
+      }
+    }
+
+    const expSnap = await getDocs(collection(db, 'users', ownerUid, 'multiAccess', accountId, 'expenses'))
+    for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId, 'expenses', e.id))
+    await deleteDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId))
+
+    for (const memberUid of (account.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try { await deleteDoc(doc(db, 'users', memberUid, 'multiAccess', accountId)) } catch (e) {}
+      }
+    }
+
+    setAccounts(prev => prev.filter(a => a.id !== accountId))
+    setExpenses(prev => { const copy = {...prev}; delete copy[accountId]; return copy })
+  }
+
   const updateBudget = async (accountId, newBudget) => {
+    const account = accounts.find(a => a.id === accountId)
+    const ownerUid = account?.ownerUid || uid
     setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, budget: Number(newBudget) } : a))
-    if (uid) await updateDoc(doc(db, 'users', uid, 'multiAccess', accountId), { budget: Number(newBudget) })
+    if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId), { budget: Number(newBudget) })
   }
 
   const addUser = async (accountId, newMember) => {
@@ -118,26 +162,31 @@ export function MultiAccessProvider({ children }) {
     if (!account) return
     const updated = [...account.members, newMember]
     setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, members: updated } : a))
-    if (uid) await updateDoc(doc(db, 'users', uid, 'multiAccess', accountId), { members: updated })
+    const ownerUid = account.ownerUid || uid
+    if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId), { members: updated })
   }
 
   const addExpense = async (accountId, expense) => {
-    if (uid) {
-      const ref = await addDoc(collection(db, 'users', uid, 'multiAccess', accountId, 'expenses'), expense)
+    const account = accounts.find(a => a.id === accountId)
+    const ownerUid = account?.ownerUid || uid
+    if (ownerUid) {
+      const ref = await addDoc(collection(db, 'users', ownerUid, 'multiAccess', accountId, 'expenses'), expense)
       setExpenses(prev => ({ ...prev, [accountId]: [...(prev[accountId] || []), { id: ref.id, ...expense }] }))
-    } else {
-      setExpenses(prev => ({ ...prev, [accountId]: [...(prev[accountId] || []), { id: Date.now().toString(), ...expense }] }))
     }
   }
 
   const deleteExpense = async (accountId, expId) => {
+    const account = accounts.find(a => a.id === accountId)
+    const ownerUid = account?.ownerUid || uid
     setExpenses(prev => ({ ...prev, [accountId]: (prev[accountId] || []).filter(e => e.id !== expId) }))
-    if (uid) await deleteDoc(doc(db, 'users', uid, 'multiAccess', accountId, 'expenses', expId))
+    if (ownerUid) await deleteDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId, 'expenses', expId))
   }
 
   const updateExpense = async (accountId, expId, updated) => {
+    const account = accounts.find(a => a.id === accountId)
+    const ownerUid = account?.ownerUid || uid
     setExpenses(prev => ({ ...prev, [accountId]: (prev[accountId] || []).map(e => e.id === expId ? { ...e, ...updated } : e) }))
-    if (uid) await updateDoc(doc(db, 'users', uid, 'multiAccess', accountId, 'expenses', expId), updated)
+    if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'multiAccess', accountId, 'expenses', expId), updated)
   }
 
   const getSettlement = (accountId) => {
@@ -164,7 +213,7 @@ export function MultiAccessProvider({ children }) {
   }
 
   return (
-    <MultiAccessContext.Provider value={{ accounts, createAccount, acceptAccountInvite, declineAccountInvite, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses, uid, currentUser }}>
+    <MultiAccessContext.Provider value={{ accounts, createAccount, deleteAccount, acceptAccountInvite, declineAccountInvite, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses, uid, currentUser }}>
       {children}
     </MultiAccessContext.Provider>
   )

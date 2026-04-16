@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase'
-import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, query, where, arrayUnion, arrayRemove } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, query, where, setDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 
 const GroupContext = createContext()
@@ -34,14 +34,13 @@ export function GroupProvider({ children }) {
     setExpenses(loadedExpenses)
   }
 
-  const createGroup = async (name, memberUids, memberNames, inviteLinks) => {
+  const createGroup = async (name, memberUids, memberNames) => {
     if (!uid) return null
     const groupData = {
       name,
       members: ['Me', ...memberNames],
-      memberUids: [uid, ...memberUids],
-      pendingMembers: memberNames.filter((_, i) => memberUids[i] !== null),
-      invitedNames: memberNames,
+      memberUids: [uid, ...memberUids.filter(u => u)],
+      pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
       createdBy: uid,
       createdByName: currentUser?.displayName || 'Someone',
@@ -51,8 +50,8 @@ export function GroupProvider({ children }) {
     const groupId = ref.id
 
     for (let i = 0; i < memberNames.length; i++) {
-      const memberName = memberNames[i]
       const memberUid = memberUids[i]
+      const memberName = memberNames[i]
       if (memberUid) {
         await addDoc(collection(db, 'notifications'), {
           toUid: memberUid,
@@ -78,8 +77,8 @@ export function GroupProvider({ children }) {
     const groupRef = doc(db, 'users', ownerUid, 'groups', groupId)
     const groupSnap = await getDoc(groupRef)
     if (!groupSnap.exists()) return
-
     const groupData = groupSnap.data()
+
     const newPending = (groupData.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
 
@@ -88,26 +87,22 @@ export function GroupProvider({ children }) {
       status: isNowActive ? 'active' : 'awaiting'
     })
 
-    setGroups(prev => prev.map(g => g.id === groupId ? {
-      ...g,
+    const myGroupData = {
+      ...groupData,
       pendingMembers: newPending,
-      status: isNowActive ? 'active' : 'awaiting'
-    } : g))
-
-    if (isNowActive) {
-      await addDoc(collection(db, 'notifications'), {
-        toUid: ownerUid,
-        toName: groupData.createdByName,
-        fromName: toName,
-        groupId,
-        groupName: groupData.name,
-        ownerUid,
-        type: 'group_now_active',
-        feature: 'group',
-        status: 'info',
-        createdAt: new Date().toISOString()
-      })
+      status: isNowActive ? 'active' : 'awaiting',
+      ownerUid,
+      isShared: true
     }
+    await setDoc(doc(db, 'users', toUid, 'groups', groupId), myGroupData)
+
+    setGroups(prev => {
+      const existing = prev.find(g => g.id === groupId)
+      if (existing) {
+        return prev.map(g => g.id === groupId ? { ...g, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : g)
+      }
+      return [...prev, { id: groupId, ...myGroupData }]
+    })
   }
 
   const declineGroupInvite = async (notification) => {
@@ -138,50 +133,58 @@ export function GroupProvider({ children }) {
   const deleteGroup = async (groupId) => {
     const group = groups.find(g => g.id === groupId)
     if (!group) return
+    const ownerUid = group.ownerUid || uid
+
     for (const memberName of group.members) {
       if (memberName !== 'Me') {
-        const q = query(collection(db, 'notifications'), where('toName', '==', memberName))
-        const snap = await getDocs(q)
-        const existing = snap.docs.find(d => d.data().groupId === groupId)
-        if (!existing) {
-          await addDoc(collection(db, 'notifications'), {
-            toName: memberName,
-            fromName: currentUser?.displayName || 'Someone',
-            groupId,
-            groupName: group.name,
-            ownerUid: uid,
-            type: 'group_deleted',
-            feature: 'group',
-            status: 'info',
-            createdAt: new Date().toISOString()
-          })
-        }
+        await addDoc(collection(db, 'notifications'), {
+          toName: memberName,
+          fromName: currentUser?.displayName || 'Someone',
+          groupId,
+          groupName: group.name,
+          type: 'group_deleted',
+          feature: 'group',
+          read: false,
+          createdAt: new Date().toISOString()
+        })
       }
     }
-    const expSnap = await getDocs(collection(db, 'users', uid, 'groups', groupId, 'expenses'))
-    for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', uid, 'groups', groupId, 'expenses', e.id))
-    await deleteDoc(doc(db, 'users', uid, 'groups', groupId))
+
+    const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', groupId, 'expenses'))
+    for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', e.id))
+    await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId))
+
+    for (const memberUid of (group.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try { await deleteDoc(doc(db, 'users', memberUid, 'groups', groupId)) } catch (e) {}
+      }
+    }
+
     setGroups(prev => prev.filter(g => g.id !== groupId))
     setExpenses(prev => { const copy = {...prev}; delete copy[groupId]; return copy })
   }
 
   const addGroupExpense = async (groupId, expense) => {
-    if (uid) {
-      const ref = await addDoc(collection(db, 'users', uid, 'groups', groupId, 'expenses'), expense)
+    const group = groups.find(g => g.id === groupId)
+    const ownerUid = group?.ownerUid || uid
+    if (ownerUid) {
+      const ref = await addDoc(collection(db, 'users', ownerUid, 'groups', groupId, 'expenses'), expense)
       setExpenses(prev => ({ ...prev, [groupId]: [...(prev[groupId] || []), { id: ref.id, ...expense }] }))
-    } else {
-      setExpenses(prev => ({ ...prev, [groupId]: [...(prev[groupId] || []), { id: Date.now().toString(), ...expense }] }))
     }
   }
 
   const deleteGroupExpense = async (groupId, expId) => {
+    const group = groups.find(g => g.id === groupId)
+    const ownerUid = group?.ownerUid || uid
     setExpenses(prev => ({ ...prev, [groupId]: (prev[groupId] || []).filter(e => e.id !== expId) }))
-    if (uid) await deleteDoc(doc(db, 'users', uid, 'groups', groupId, 'expenses', expId))
+    if (ownerUid) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId))
   }
 
   const updateGroupExpense = async (groupId, expId, updated) => {
+    const group = groups.find(g => g.id === groupId)
+    const ownerUid = group?.ownerUid || uid
     setExpenses(prev => ({ ...prev, [groupId]: (prev[groupId] || []).map(e => e.id === expId ? { ...e, ...updated } : e) }))
-    if (uid) await updateDoc(doc(db, 'users', uid, 'groups', groupId, 'expenses', expId), updated)
+    if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId), updated)
   }
 
   const getSettlement = (groupId) => {
