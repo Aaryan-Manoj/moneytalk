@@ -37,6 +37,22 @@ export default function GroupDashboard() {
     setConfirmDelete(null)
   }
 
+  const getStatusBadge = (group) => {
+    if (group.status === 'awaiting') {
+      const pending = group.pendingMembers || []
+      return (
+        <span style={{background:'#FEF3C7',color:'#92400E',fontSize:'11px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px'}}>
+          Awaiting Confirmation ({pending.length})
+        </span>
+      )
+    }
+    return (
+      <span style={{background:'#D1FAE5',color:'#065F46',fontSize:'11px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px'}}>
+        Active
+      </span>
+    )
+  }
+
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
       <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
@@ -78,15 +94,25 @@ export default function GroupDashboard() {
           </div>
         )}
         {groups.map(group => (
-          <div key={group.id} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div onClick={() => navigate(`/group/${group.id}/expenses`)} style={{flex:1,cursor:'pointer'}}>
-              <p style={{fontSize:'16px',fontWeight:'600',color:'#111827'}}>{group.name}</p>
-              <p style={{fontSize:'13px',color:'#6B7280',marginTop:'4px'}}>{group.members.join(', ')}</p>
+          <div key={group.id} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px'}}>
+              <div onClick={() => group.status === 'active' && navigate(`/group/${group.id}/expenses`)} style={{flex:1,cursor: group.status === 'active' ? 'pointer' : 'default'}}>
+                <p style={{fontSize:'16px',fontWeight:'600',color:'#111827'}}>{group.name}</p>
+                <p style={{fontSize:'13px',color:'#6B7280',marginTop:'2px'}}>{group.members.join(', ')}</p>
+              </div>
+              <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                {group.status === 'active' && (
+                  <span onClick={() => navigate(`/group/${group.id}/expenses`)} style={{color:'#6B7280',fontSize:'20px',cursor:'pointer'}}>›</span>
+                )}
+                {group.createdBy === group.createdBy && (
+                  <button onClick={() => setConfirmDelete(group.id)} style={{background:'#FEE2E2',border:'none',borderRadius:'8px',padding:'6px 10px',fontSize:'13px',cursor:'pointer',color:'#EF4444'}}>Delete</button>
+                )}
+              </div>
             </div>
-            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-              <span onClick={() => navigate(`/group/${group.id}/expenses`)} style={{color:'#6B7280',fontSize:'20px',cursor:'pointer'}}>›</span>
-              <button onClick={() => setConfirmDelete(group.id)} style={{background:'#FEE2E2',border:'none',borderRadius:'8px',padding:'6px 10px',fontSize:'13px',cursor:'pointer',color:'#EF4444'}}>Delete</button>
-            </div>
+            <div style={{marginTop:'8px'}}>{getStatusBadge(group)}</div>
+            {group.status === 'awaiting' && (
+              <p style={{fontSize:'12px',color:'#92400E',marginTop:'6px'}}>Waiting for: {(group.pendingMembers || []).join(', ')}</p>
+            )}
           </div>
         ))}
       </div>

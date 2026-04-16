@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase'
-import { collection, addDoc, getDocs, doc, setDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, query, where } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 
 const MultiAccessContext = createContext()
@@ -9,36 +9,103 @@ export function MultiAccessProvider({ children }) {
   const [accounts, setAccounts] = useState([])
   const [expenses, setExpenses] = useState({})
   const [uid, setUid] = useState(null)
+  const [currentUser, setCurrentUser] = useState(null)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUid(user.uid)
-        const accSnap = await getDocs(collection(db, 'users', user.uid, 'multiAccess'))
-        const loadedAccounts = accSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        setAccounts(loadedAccounts)
-        const loadedExpenses = {}
-        for (const acc of loadedAccounts) {
-          const expSnap = await getDocs(collection(db, 'users', user.uid, 'multiAccess', acc.id, 'expenses'))
-          loadedExpenses[acc.id] = expSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        }
-        setExpenses(loadedExpenses)
+        setCurrentUser(user)
+        await loadAccounts(user.uid)
       }
     })
     return () => unsub()
   }, [])
 
-  const createAccount = async (name, members, budget) => {
-    const data = { name, members: ['Me', ...members], budget: Number(budget), createdAt: new Date().toISOString() }
-    if (uid) {
-      const ref = await addDoc(collection(db, 'users', uid, 'multiAccess'), data)
-      setAccounts(prev => [...prev, { id: ref.id, ...data }])
-      return ref.id
-    } else {
-      const id = Date.now().toString()
-      setAccounts(prev => [...prev, { id, ...data }])
-      return id
+  const loadAccounts = async (userId) => {
+    const snap = await getDocs(collection(db, 'users', userId, 'multiAccess'))
+    const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    setAccounts(loaded)
+    const loadedExpenses = {}
+    for (const acc of loaded) {
+      const expSnap = await getDocs(collection(db, 'users', userId, 'multiAccess', acc.id, 'expenses'))
+      loadedExpenses[acc.id] = expSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     }
+    setExpenses(loadedExpenses)
+  }
+
+  const createAccount = async (name, memberUids, memberNames, budget) => {
+    if (!uid) return null
+    const data = {
+      name,
+      members: ['Me', ...memberNames],
+      memberUids: [uid, ...memberUids],
+      pendingMembers: memberNames.filter((_, i) => memberUids[i] !== null),
+      status: memberNames.length === 0 ? 'active' : 'awaiting',
+      budget: Number(budget),
+      createdBy: uid,
+      createdByName: currentUser?.displayName || 'Someone',
+      createdAt: new Date().toISOString()
+    }
+    const ref = await addDoc(collection(db, 'users', uid, 'multiAccess'), data)
+    const accountId = ref.id
+
+    for (let i = 0; i < memberNames.length; i++) {
+      const memberName = memberNames[i]
+      const memberUid = memberUids[i]
+      if (memberUid) {
+        await addDoc(collection(db, 'notifications'), {
+          toUid: memberUid,
+          toName: memberName,
+          fromName: currentUser?.displayName || 'Someone',
+          groupId: accountId,
+          groupName: name,
+          ownerUid: uid,
+          type: 'group_invite',
+          feature: 'multiAccess',
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        })
+      }
+    }
+
+    setAccounts(prev => [...prev, { id: accountId, ...data }])
+    return accountId
+  }
+
+  const acceptAccountInvite = async (notification) => {
+    const { groupId, ownerUid, toName } = notification
+    const ref = doc(db, 'users', ownerUid, 'multiAccess', groupId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) return
+    const data = snap.data()
+    const newPending = (data.pendingMembers || []).filter(m => m !== toName)
+    const isNowActive = newPending.length === 0
+    await updateDoc(ref, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
+    setAccounts(prev => prev.map(a => a.id === groupId ? { ...a, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : a))
+  }
+
+  const declineAccountInvite = async (notification) => {
+    const { groupId, ownerUid, groupName, toName } = notification
+    const ref = doc(db, 'users', ownerUid, 'multiAccess', groupId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) return
+    const data = snap.data()
+    await addDoc(collection(db, 'notifications'), {
+      toUid: ownerUid,
+      toName: data.createdByName,
+      fromName: toName,
+      groupId,
+      groupName,
+      ownerUid,
+      type: 'group_declined',
+      feature: 'multiAccess',
+      status: 'info',
+      createdAt: new Date().toISOString()
+    })
+    const expSnap = await getDocs(collection(db, 'users', ownerUid, 'multiAccess', groupId, 'expenses'))
+    for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'multiAccess', groupId, 'expenses', e.id))
+    await deleteDoc(ref)
   }
 
   const updateBudget = async (accountId, newBudget) => {
@@ -57,31 +124,19 @@ export function MultiAccessProvider({ children }) {
   const addExpense = async (accountId, expense) => {
     if (uid) {
       const ref = await addDoc(collection(db, 'users', uid, 'multiAccess', accountId, 'expenses'), expense)
-      setExpenses(prev => ({
-        ...prev,
-        [accountId]: [...(prev[accountId] || []), { id: ref.id, ...expense }]
-      }))
+      setExpenses(prev => ({ ...prev, [accountId]: [...(prev[accountId] || []), { id: ref.id, ...expense }] }))
     } else {
-      setExpenses(prev => ({
-        ...prev,
-        [accountId]: [...(prev[accountId] || []), { id: Date.now().toString(), ...expense }]
-      }))
+      setExpenses(prev => ({ ...prev, [accountId]: [...(prev[accountId] || []), { id: Date.now().toString(), ...expense }] }))
     }
   }
 
   const deleteExpense = async (accountId, expId) => {
-    setExpenses(prev => ({
-      ...prev,
-      [accountId]: (prev[accountId] || []).filter(e => e.id !== expId)
-    }))
+    setExpenses(prev => ({ ...prev, [accountId]: (prev[accountId] || []).filter(e => e.id !== expId) }))
     if (uid) await deleteDoc(doc(db, 'users', uid, 'multiAccess', accountId, 'expenses', expId))
   }
 
   const updateExpense = async (accountId, expId, updated) => {
-    setExpenses(prev => ({
-      ...prev,
-      [accountId]: (prev[accountId] || []).map(e => e.id === expId ? { ...e, ...updated } : e)
-    }))
+    setExpenses(prev => ({ ...prev, [accountId]: (prev[accountId] || []).map(e => e.id === expId ? { ...e, ...updated } : e) }))
     if (uid) await updateDoc(doc(db, 'users', uid, 'multiAccess', accountId, 'expenses', expId), updated)
   }
 
@@ -109,7 +164,7 @@ export function MultiAccessProvider({ children }) {
   }
 
   return (
-    <MultiAccessContext.Provider value={{ accounts, createAccount, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses }}>
+    <MultiAccessContext.Provider value={{ accounts, createAccount, acceptAccountInvite, declineAccountInvite, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses, uid, currentUser }}>
       {children}
     </MultiAccessContext.Provider>
   )

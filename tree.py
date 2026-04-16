@@ -2,7 +2,17 @@ import os
 
 # === CONFIG ===
 ROOT_DIR = r"C:\Users\USER\moneytalk"
-EXCLUDE_DIR = os.path.normpath(r"C:\Users\USER\moneytalk\node_modules")
+
+EXCLUDE_DIRS = {
+    ".git",
+    "node_modules",
+    "__pycache__"
+}
+
+def should_exclude(path):
+    # Exclude if any part of the path matches excluded dirs
+    parts = path.split(os.sep)
+    return any(part in EXCLUDE_DIRS for part in parts)
 
 def generate_tree(start_path, prefix=""):
     try:
@@ -10,13 +20,11 @@ def generate_tree(start_path, prefix=""):
     except PermissionError:
         return
 
+    # Filter excluded items BEFORE processing
+    items = [item for item in items if not should_exclude(os.path.join(start_path, item))]
+
     for index, item in enumerate(items):
         full_path = os.path.join(start_path, item)
-        normalized_path = os.path.normpath(full_path)
-
-        # Skip excluded directory
-        if normalized_path.startswith(EXCLUDE_DIR):
-            continue
 
         connector = "└── " if index == len(items) - 1 else "├── "
         print(prefix + connector + item)

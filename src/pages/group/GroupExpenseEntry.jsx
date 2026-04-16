@@ -47,6 +47,21 @@ export default function GroupExpenseEntry() {
 
   if (!group) return <div style={{padding:'32px'}}>Group not found.</div>
 
+  if (group.status === 'awaiting') return (
+    <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
+      <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
+        <button onClick={() => navigate('/group')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer'}}>← Back</button>
+        <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
+      </div>
+      <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'4px'}}>{group.name}</h1>
+      <div style={{background:'#FEF3C7',borderRadius:'16px',padding:'32px',textAlign:'center',marginTop:'24px'}}>
+        <p style={{fontSize:'20px',marginBottom:'8px'}}>⏳</p>
+        <p style={{fontSize:'16px',fontWeight:'700',color:'#92400E',marginBottom:'8px'}}>Awaiting Confirmation</p>
+        <p style={{fontSize:'14px',color:'#92400E'}}>Waiting for {(group.pendingMembers || []).join(', ')} to accept the invite before expenses can be added.</p>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
       <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>

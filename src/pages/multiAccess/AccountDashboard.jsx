@@ -5,6 +5,21 @@ export default function AccountDashboard() {
   const navigate = useNavigate()
   const { accounts } = useMultiAccess()
 
+  const getStatusBadge = (acc) => {
+    if (acc.status === 'awaiting') {
+      return (
+        <span style={{background:'#FEF3C7',color:'#92400E',fontSize:'11px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px'}}>
+          Awaiting Confirmation ({(acc.pendingMembers || []).length})
+        </span>
+      )
+    }
+    return (
+      <span style={{background:'#D1FAE5',color:'#065F46',fontSize:'11px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px'}}>
+        Active
+      </span>
+    )
+  }
+
   return (
     <div style={{minHeight:'100vh',background:'#F9FAFB',padding:'32px',maxWidth:'560px',margin:'0 auto'}}>
       <div style={{display:'flex',gap:'12px',marginBottom:'24px'}}>
@@ -20,13 +35,19 @@ export default function AccountDashboard() {
           </div>
         )}
         {accounts.map(acc => (
-          <div key={acc.id} onClick={() => navigate(`/multiaccess/${acc.id}`)} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <p style={{fontSize:'16px',fontWeight:'600',color:'#111827'}}>{acc.name}</p>
-              <p style={{fontSize:'13px',color:'#6B7280',marginTop:'4px'}}>{acc.members.join(', ')}</p>
-              <p style={{fontSize:'13px',color:'#2563EB',marginTop:'2px',fontWeight:'600'}}>Budget: ₹{acc.budget.toLocaleString()}</p>
+          <div key={acc.id} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
+            <div onClick={() => acc.status === 'active' && navigate(`/multiaccess/${acc.id}`)} style={{cursor: acc.status === 'active' ? 'pointer' : 'default',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+              <div>
+                <p style={{fontSize:'16px',fontWeight:'600',color:'#111827'}}>{acc.name}</p>
+                <p style={{fontSize:'13px',color:'#6B7280',marginTop:'4px'}}>{acc.members.join(', ')}</p>
+                <p style={{fontSize:'13px',color:'#2563EB',marginTop:'2px',fontWeight:'600'}}>Budget: ₹{acc.budget.toLocaleString()}</p>
+              </div>
+              {acc.status === 'active' && <span style={{color:'#6B7280',fontSize:'20px'}}>›</span>}
             </div>
-            <span style={{color:'#6B7280',fontSize:'20px'}}>›</span>
+            <div>{getStatusBadge(acc)}</div>
+            {acc.status === 'awaiting' && (
+              <p style={{fontSize:'12px',color:'#92400E',marginTop:'6px'}}>Waiting for: {(acc.pendingMembers || []).join(', ')}</p>
+            )}
           </div>
         ))}
       </div>

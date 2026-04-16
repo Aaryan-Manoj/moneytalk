@@ -1,12 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { auth, db } from '../firebase'
-import { collection, query, where, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore'
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { useGroup } from '../context/GroupContext'
+import { useMultiAccess } from '../context/MultiAccessContext'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [invites, setInvites] = useState([])
+  const { acceptGroupInvite, declineGroupInvite } = useGroup()
+  const { acceptAccountInvite, declineAccountInvite } = useMultiAccess()
+  const [notifications, setNotifications] = useState([])
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
@@ -15,9 +19,13 @@ export default function Dashboard() {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u)
-        const q = query(collection(db, 'invites'), where('memberName', '==', u.displayName), where('status', '==', 'pending'))
+        const q = query(
+          collection(db, 'notifications'),
+          where('toUid', '==', u.uid),
+          where('status', '==', 'pending')
+        )
         const snap = await getDocs(q)
-        setInvites(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })))
         const pending = localStorage.getItem('pendingInvite')
         if (pending) {
           localStorage.removeItem('pendingInvite')
@@ -29,18 +37,18 @@ export default function Dashboard() {
     return () => unsub()
   }, [])
 
-  const acceptInvite = async (invite) => {
-    const col = invite.type === 'group' ? 'groups' : 'multiAccess'
-    await updateDoc(doc(db, 'users', invite.createdBy, col, invite.entityId), {
-      members: arrayUnion(user.displayName)
-    })
-    await updateDoc(doc(db, 'invites', invite.id), { status: 'accepted' })
-    setInvites(prev => prev.filter(i => i.id !== invite.id))
+  const handleAccept = async (n) => {
+    if (n.feature === 'group') await acceptGroupInvite(n)
+    else await acceptAccountInvite(n)
+    await updateDoc(doc(db, 'notifications', n.id), { status: 'accepted' })
+    setNotifications(prev => prev.filter(x => x.id !== n.id))
   }
 
-  const declineInvite = async (invite) => {
-    await updateDoc(doc(db, 'invites', invite.id), { status: 'declined' })
-    setInvites(prev => prev.filter(i => i.id !== invite.id))
+  const handleDecline = async (n) => {
+    if (n.feature === 'group') await declineGroupInvite(n)
+    else await declineAccountInvite(n)
+    await updateDoc(doc(db, 'notifications', n.id), { status: 'declined' })
+    setNotifications(prev => prev.filter(x => x.id !== n.id))
   }
 
   const handleSignOut = async () => {
@@ -87,19 +95,21 @@ export default function Dashboard() {
       )}
 
       <h1 style={{fontSize:'28px',fontWeight:'700',color:'#111827',marginBottom:'4px'}}>MoneyTalk</h1>
-      <p style={{fontSize:'15px',color:'#6B7280',marginBottom:'40px'}}>Welcome back, {user?.displayName || 'there'} 👋</p>
+      <p style={{fontSize:'15px',color:'#6B7280',marginBottom: notifications.length > 0 ? '24px' : '40px'}}>Welcome back, {user?.displayName || 'there'} 👋</p>
 
-      {invites.length > 0 && (
+      {notifications.length > 0 && (
         <div style={{width:'100%',maxWidth:'560px',marginBottom:'24px'}}>
-          {invites.map(invite => (
-            <div key={invite.id} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div>
-                <p style={{fontSize:'14px',fontWeight:'700',color:'#111827'}}>📨 Invite</p>
-                <p style={{fontSize:'13px',color:'#6B7280',marginTop:'2px'}}>{invite.createdByName} invited you to <strong>{invite.entityName}</strong></p>
-              </div>
+          {notifications.map(n => (
+            <div key={n.id} style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'12px'}}>
+              <p style={{fontSize:'14px',fontWeight:'700',color:'#111827',marginBottom:'4px'}}>
+                📨 {n.feature === 'group' ? 'Group' : 'Shared Account'} Invite
+              </p>
+              <p style={{fontSize:'13px',color:'#6B7280',marginBottom:'12px'}}>
+                <strong>{n.fromName}</strong> added you to <strong>{n.groupName}</strong>
+              </p>
               <div style={{display:'flex',gap:'8px'}}>
-                <button onClick={() => acceptInvite(invite)} style={{background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'10px',padding:'8px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Accept</button>
-                <button onClick={() => declineInvite(invite)} style={{background:'#F3F4F6',color:'#6B7280',border:'none',borderRadius:'10px',padding:'8px 14px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Decline</button>
+                <button onClick={() => handleAccept(n)} style={{flex:1,background:'#2563EB',color:'#FFFFFF',border:'none',borderRadius:'10px',padding:'10px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Accept & Join</button>
+                <button onClick={() => handleDecline(n)} style={{flex:1,background:'#FEE2E2',color:'#EF4444',border:'none',borderRadius:'10px',padding:'10px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Decline</button>
               </div>
             </div>
           ))}
