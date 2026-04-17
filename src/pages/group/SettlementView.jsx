@@ -6,11 +6,12 @@ import { useGroup } from '../../context/GroupContext'
 export default function SettlementView() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { groups, getSettlement, expenses } = useGroup()
+  const { groups, getSettlement, expenses, uid } = useGroup()
   const [paid, setPaid] = useState({})
 
   const group = groups.find(g => g.id === id)
-  const { balances, transactions } = getSettlement(id)
+  // ✅ Pass uid so 'Me' is resolved correctly per viewer
+  const { balances, transactions } = getSettlement(id, uid)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
 
@@ -85,9 +86,7 @@ export default function SettlementView() {
         })}
       </div>
 
-      {/* ✅ Export PDF button */}
       <button onClick={() => exportGroupPDF(group, groupExpenses, {balances, transactions})} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
-
     </div>
   )
 }

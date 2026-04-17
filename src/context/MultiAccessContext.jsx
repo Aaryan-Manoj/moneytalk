@@ -17,6 +17,11 @@ export function MultiAccessProvider({ children }) {
         setUid(user.uid)
         setCurrentUser(user)
         await loadAccounts(user.uid)
+      } else {
+        setUid(null)
+        setCurrentUser(null)
+        setAccounts([])
+        setExpenses({})
       }
     })
     return () => unsub()
@@ -28,7 +33,8 @@ export function MultiAccessProvider({ children }) {
     setAccounts(loaded)
     const loadedExpenses = {}
     for (const acc of loaded) {
-      const expSnap = await getDocs(collection(db, 'users', userId, 'multiAccess', acc.id, 'expenses'))
+      const ownerUid = acc.ownerUid || userId
+      const expSnap = await getDocs(collection(db, 'users', ownerUid, 'multiAccess', acc.id, 'expenses'))
       loadedExpenses[acc.id] = expSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     }
     setExpenses(loadedExpenses)
@@ -79,18 +85,34 @@ export function MultiAccessProvider({ children }) {
     const snap = await getDoc(ref)
     if (!snap.exists()) return
     const data = snap.data()
+
     const newPending = (data.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
+
     await updateDoc(ref, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
 
+    // ✅ Write full copy to B's Firestore path
     const myData = { ...data, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting', ownerUid, isShared: true }
     await setDoc(doc(db, 'users', toUid, 'multiAccess', groupId), myData)
 
-    setAccounts(prev => {
-      const existing = prev.find(a => a.id === groupId)
-      if (existing) return prev.map(a => a.id === groupId ? { ...a, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : a)
-      return [...prev, { id: groupId, ...myData }]
-    })
+    // ✅ Update all other members' copies
+    for (const memberUid of (data.memberUids || [])) {
+      if (memberUid !== ownerUid && memberUid !== toUid) {
+        try {
+          const memberCopy = doc(db, 'users', memberUid, 'multiAccess', groupId)
+          const memberSnap = await getDoc(memberCopy)
+          if (memberSnap.exists()) {
+            await updateDoc(memberCopy, {
+              pendingMembers: newPending,
+              status: isNowActive ? 'active' : 'awaiting'
+            })
+          }
+        } catch (e) {}
+      }
+    }
+
+    // ✅ Refresh local state
+    await loadAccounts(toUid)
   }
 
   const declineAccountInvite = async (notification) => {
@@ -99,6 +121,7 @@ export function MultiAccessProvider({ children }) {
     const snap = await getDoc(ref)
     if (!snap.exists()) return
     const data = snap.data()
+
     await addDoc(collection(db, 'notifications'), {
       toUid: ownerUid,
       toName: data.createdByName,
@@ -111,9 +134,16 @@ export function MultiAccessProvider({ children }) {
       status: 'info',
       createdAt: new Date().toISOString()
     })
+
     const expSnap = await getDocs(collection(db, 'users', ownerUid, 'multiAccess', groupId, 'expenses'))
     for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'multiAccess', groupId, 'expenses', e.id))
     await deleteDoc(ref)
+
+    for (const memberUid of (data.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try { await deleteDoc(doc(db, 'users', memberUid, 'multiAccess', groupId)) } catch (e) {}
+      }
+    }
   }
 
   const deleteAccount = async (accountId) => {
@@ -121,18 +151,24 @@ export function MultiAccessProvider({ children }) {
     if (!account) return
     const ownerUid = account.ownerUid || uid
 
-    for (const memberName of account.members) {
-      if (memberName !== 'Me') {
-        await addDoc(collection(db, 'notifications'), {
-          toName: memberName,
-          fromName: currentUser?.displayName || 'Someone',
-          groupId: accountId,
-          groupName: account.name,
-          type: 'group_deleted',
-          feature: 'multiAccess',
-          read: false,
-          createdAt: new Date().toISOString()
-        })
+    for (const memberUid of (account.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try {
+          const memberIndex = (account.memberUids || []).indexOf(memberUid)
+          const memberName = account.members[memberIndex] || 'Member'
+          await addDoc(collection(db, 'notifications'), {
+            toUid: memberUid,
+            toName: memberName,
+            fromName: currentUser?.displayName || 'Someone',
+            groupId: accountId,
+            groupName: account.name,
+            message: `${currentUser?.displayName || 'Someone'} deleted the shared account "${account.name}".`,
+            type: 'group_deleted',
+            feature: 'multiAccess',
+            read: false,
+            createdAt: new Date().toISOString()
+          })
+        } catch (e) {}
       }
     }
 
@@ -193,11 +229,11 @@ export function MultiAccessProvider({ children }) {
     const account = accounts.find(a => a.id === accountId)
     if (!account) return []
     const accExpenses = expenses[accountId] || []
-    const totalSpent = accExpenses.reduce((s, e) => s + Number(e.amount), 0)
-    const perPerson = totalSpent / account.members.length
     const paid = {}
     account.members.forEach(m => paid[m] = 0)
     accExpenses.forEach(e => { paid[e.paidBy] = (paid[e.paidBy] || 0) + Number(e.amount) })
+    const totalSpent = accExpenses.reduce((s, e) => s + Number(e.amount), 0)
+    const perPerson = totalSpent / account.members.length
     return account.members.map(m => ({
       member: m,
       paid: paid[m] || 0,
@@ -213,7 +249,7 @@ export function MultiAccessProvider({ children }) {
   }
 
   return (
-    <MultiAccessContext.Provider value={{ accounts, createAccount, deleteAccount, acceptAccountInvite, declineAccountInvite, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses, uid, currentUser }}>
+    <MultiAccessContext.Provider value={{ accounts, createAccount, deleteAccount, acceptAccountInvite, declineAccountInvite, updateBudget, addUser, addExpense, deleteExpense, updateExpense, getSettlement, getRemaining, expenses, uid, currentUser, loadAccounts }}>
       {children}
     </MultiAccessContext.Provider>
   )

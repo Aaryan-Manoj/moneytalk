@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase'
-import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, query, where, setDoc } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 
 const GroupContext = createContext()
@@ -17,6 +17,11 @@ export function GroupProvider({ children }) {
         setUid(user.uid)
         setCurrentUser(user)
         await loadGroups(user.uid)
+      } else {
+        setUid(null)
+        setCurrentUser(null)
+        setGroups([])
+        setExpenses({})
       }
     })
     return () => unsub()
@@ -28,7 +33,8 @@ export function GroupProvider({ children }) {
     setGroups(loadedGroups)
     const loadedExpenses = {}
     for (const group of loadedGroups) {
-      const expSnap = await getDocs(collection(db, 'users', userId, 'groups', group.id, 'expenses'))
+      const ownerUid = group.ownerUid || userId
+      const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', group.id, 'expenses'))
       loadedExpenses[group.id] = expSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     }
     setExpenses(loadedExpenses)
@@ -82,11 +88,13 @@ export function GroupProvider({ children }) {
     const newPending = (groupData.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
 
+    // Update owner's copy
     await updateDoc(groupRef, {
       pendingMembers: newPending,
       status: isNowActive ? 'active' : 'awaiting'
     })
 
+    // ✅ Write full group copy to B's Firestore path
     const myGroupData = {
       ...groupData,
       pendingMembers: newPending,
@@ -96,13 +104,24 @@ export function GroupProvider({ children }) {
     }
     await setDoc(doc(db, 'users', toUid, 'groups', groupId), myGroupData)
 
-    setGroups(prev => {
-      const existing = prev.find(g => g.id === groupId)
-      if (existing) {
-        return prev.map(g => g.id === groupId ? { ...g, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' } : g)
+    // ✅ Also update all other members' copies so they see the updated status
+    for (const memberUid of (groupData.memberUids || [])) {
+      if (memberUid !== ownerUid && memberUid !== toUid) {
+        try {
+          const memberCopy = doc(db, 'users', memberUid, 'groups', groupId)
+          const memberSnap = await getDoc(memberCopy)
+          if (memberSnap.exists()) {
+            await updateDoc(memberCopy, {
+              pendingMembers: newPending,
+              status: isNowActive ? 'active' : 'awaiting'
+            })
+          }
+        } catch (e) {}
       }
-      return [...prev, { id: groupId, ...myGroupData }]
-    })
+    }
+
+    // ✅ Refresh local state properly
+    await loadGroups(toUid)
   }
 
   const declineGroupInvite = async (notification) => {
@@ -128,6 +147,13 @@ export function GroupProvider({ children }) {
     const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', groupId, 'expenses'))
     for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', e.id))
     await deleteDoc(groupRef)
+
+    // Clean up all member copies too
+    for (const memberUid of (groupData.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try { await deleteDoc(doc(db, 'users', memberUid, 'groups', groupId)) } catch (e) {}
+      }
+    }
   }
 
   const deleteGroup = async (groupId) => {
@@ -135,18 +161,27 @@ export function GroupProvider({ children }) {
     if (!group) return
     const ownerUid = group.ownerUid || uid
 
-    for (const memberName of group.members) {
-      if (memberName !== 'Me') {
-        await addDoc(collection(db, 'notifications'), {
-          toName: memberName,
-          fromName: currentUser?.displayName || 'Someone',
-          groupId,
-          groupName: group.name,
-          type: 'group_deleted',
-          feature: 'group',
-          read: false,
-          createdAt: new Date().toISOString()
-        })
+    for (const memberUid of (group.memberUids || [])) {
+      if (memberUid !== ownerUid) {
+        try {
+          const memberSnap = await getDoc(doc(db, 'users', memberUid, 'groups', groupId))
+          const memberData = memberSnap.exists() ? memberSnap.data() : {}
+          // Find the real name of this member to notify them
+          const memberIndex = (group.memberUids || []).indexOf(memberUid)
+          const memberName = group.members[memberIndex] || 'Member'
+          await addDoc(collection(db, 'notifications'), {
+            toUid: memberUid,
+            toName: memberName,
+            fromName: currentUser?.displayName || 'Someone',
+            groupId,
+            groupName: group.name,
+            message: `${currentUser?.displayName || 'Someone'} deleted the group "${group.name}".`,
+            type: 'group_deleted',
+            feature: 'group',
+            read: false,
+            createdAt: new Date().toISOString()
+          })
+        } catch (e) {}
       }
     }
 
@@ -187,21 +222,47 @@ export function GroupProvider({ children }) {
     if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId), updated)
   }
 
-  const getSettlement = (groupId) => {
+  // ✅ Fixed: replace 'Me' with actual viewer's name in settlement
+  const getSettlement = (groupId, viewerUid) => {
     const group = groups.find(g => g.id === groupId)
     if (!group) return { balances: [], transactions: [] }
     const groupExpenses = expenses[groupId] || []
+
+    // Build a name map: 'Me' -> viewer's display name if they are the owner
+    const resolvedMembers = group.members.map((m, i) => {
+      if (m === 'Me') {
+        // 'Me' is always the owner (creator)
+        if (viewerUid && viewerUid === (group.ownerUid || group.createdBy)) {
+          return 'Me'
+        }
+        // For non-owners viewing, show creator's name
+        return group.createdByName || 'Me'
+      }
+      return m
+    })
+
     const balances = {}
-    group.members.forEach(m => balances[m] = 0)
+    resolvedMembers.forEach(m => balances[m] = 0)
+
     groupExpenses.forEach(exp => {
-      const splitAmount = exp.amount / exp.splitAmong.length
-      exp.splitAmong.forEach(member => {
-        if (member !== exp.paidBy) {
-          balances[exp.paidBy] += splitAmount
-          balances[member] -= splitAmount
+      // Remap 'Me' in expenses to resolved name
+      const paidBy = exp.paidBy === 'Me'
+        ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
+        : exp.paidBy
+      const splitAmong = exp.splitAmong.map(m =>
+        m === 'Me'
+          ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
+          : m
+      )
+      const splitAmount = exp.amount / splitAmong.length
+      splitAmong.forEach(member => {
+        if (member !== paidBy) {
+          balances[paidBy] = (balances[paidBy] || 0) + splitAmount
+          balances[member] = (balances[member] || 0) - splitAmount
         }
       })
     })
+
     const transactions = []
     const pos = Object.entries(balances).filter(([,v]) => v > 0).map(([m,v]) => ({ member: m, amount: v }))
     const neg = Object.entries(balances).filter(([,v]) => v < 0).map(([m,v]) => ({ member: m, amount: -v }))
@@ -221,7 +282,7 @@ export function GroupProvider({ children }) {
   }
 
   return (
-    <GroupContext.Provider value={{ groups, createGroup, deleteGroup, acceptGroupInvite, declineGroupInvite, addGroupExpense, deleteGroupExpense, updateGroupExpense, getSettlement, expenses, uid, currentUser }}>
+    <GroupContext.Provider value={{ groups, createGroup, deleteGroup, acceptGroupInvite, declineGroupInvite, addGroupExpense, deleteGroupExpense, updateGroupExpense, getSettlement, expenses, uid, currentUser, loadGroups }}>
       {children}
     </GroupContext.Provider>
   )
