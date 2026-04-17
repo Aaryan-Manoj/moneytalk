@@ -42,14 +42,15 @@ export function GroupProvider({ children }) {
 
   const createGroup = async (name, memberUids, memberNames) => {
     if (!uid) return null
+    const ownerName = currentUser?.displayName || 'You'
     const groupData = {
       name,
-      members: ['Me', ...memberNames],
+      members: [ownerName, ...memberNames],
       memberUids: [uid, ...memberUids.filter(u => u)],
       pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
       createdBy: uid,
-      createdByName: currentUser?.displayName || 'Someone',
+      createdByName: ownerName,
       createdAt: new Date().toISOString()
     }
     const ref = await addDoc(collection(db, 'users', uid, 'groups'), groupData)
@@ -62,7 +63,7 @@ export function GroupProvider({ children }) {
         await addDoc(collection(db, 'notifications'), {
           toUid: memberUid,
           toName: memberName,
-          fromName: currentUser?.displayName || 'Someone',
+          fromName: ownerName,
           groupId,
           groupName: name,
           ownerUid: uid,
@@ -88,13 +89,11 @@ export function GroupProvider({ children }) {
     const newPending = (groupData.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
 
-    // Update owner's copy
     await updateDoc(groupRef, {
       pendingMembers: newPending,
       status: isNowActive ? 'active' : 'awaiting'
     })
 
-    // ✅ Write full group copy to B's Firestore path
     const myGroupData = {
       ...groupData,
       pendingMembers: newPending,
@@ -104,7 +103,6 @@ export function GroupProvider({ children }) {
     }
     await setDoc(doc(db, 'users', toUid, 'groups', groupId), myGroupData)
 
-    // ✅ Also update all other members' copies so they see the updated status
     for (const memberUid of (groupData.memberUids || [])) {
       if (memberUid !== ownerUid && memberUid !== toUid) {
         try {
@@ -120,7 +118,6 @@ export function GroupProvider({ children }) {
       }
     }
 
-    // ✅ Refresh local state properly
     await loadGroups(toUid)
   }
 
@@ -148,7 +145,6 @@ export function GroupProvider({ children }) {
     for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', e.id))
     await deleteDoc(groupRef)
 
-    // Clean up all member copies too
     for (const memberUid of (groupData.memberUids || [])) {
       if (memberUid !== ownerUid) {
         try { await deleteDoc(doc(db, 'users', memberUid, 'groups', groupId)) } catch (e) {}
@@ -164,9 +160,6 @@ export function GroupProvider({ children }) {
     for (const memberUid of (group.memberUids || [])) {
       if (memberUid !== ownerUid) {
         try {
-          const memberSnap = await getDoc(doc(db, 'users', memberUid, 'groups', groupId))
-          const memberData = memberSnap.exists() ? memberSnap.data() : {}
-          // Find the real name of this member to notify them
           const memberIndex = (group.memberUids || []).indexOf(memberUid)
           const memberName = group.members[memberIndex] || 'Member'
           await addDoc(collection(db, 'notifications'), {
@@ -222,39 +215,17 @@ export function GroupProvider({ children }) {
     if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId), updated)
   }
 
-  // ✅ Fixed: replace 'Me' with actual viewer's name in settlement
-  const getSettlement = (groupId, viewerUid) => {
+  const getSettlement = (groupId) => {
     const group = groups.find(g => g.id === groupId)
     if (!group) return { balances: [], transactions: [] }
     const groupExpenses = expenses[groupId] || []
 
-    // Build a name map: 'Me' -> viewer's display name if they are the owner
-    const resolvedMembers = group.members.map((m, i) => {
-      if (m === 'Me') {
-        // 'Me' is always the owner (creator)
-        if (viewerUid && viewerUid === (group.ownerUid || group.createdBy)) {
-          return 'Me'
-        }
-        // For non-owners viewing, show creator's name
-        return group.createdByName || 'Me'
-      }
-      return m
-    })
-
     const balances = {}
-    resolvedMembers.forEach(m => balances[m] = 0)
+    group.members.forEach(m => balances[m] = 0)
 
     groupExpenses.forEach(exp => {
-      // Remap 'Me' in expenses to resolved name
-      const paidBy = exp.paidBy === 'Me'
-        ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
-        : exp.paidBy
-      const splitAmong = exp.splitAmong.map(m =>
-        m === 'Me'
-          ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
-          : m
-      )
-      const splitAmount = exp.amount / splitAmong.length
+      const { paidBy, splitAmong, amount } = exp
+      const splitAmount = amount / splitAmong.length
       splitAmong.forEach(member => {
         if (member !== paidBy) {
           balances[paidBy] = (balances[paidBy] || 0) + splitAmount
@@ -275,6 +246,7 @@ export function GroupProvider({ children }) {
       if (pos[i].amount < 0.01) i++
       if (neg[j].amount < 0.01) j++
     }
+
     return {
       balances: Object.entries(balances).map(([member, balance]) => ({ member, balance: Math.round(balance * 100) / 100 })),
       transactions

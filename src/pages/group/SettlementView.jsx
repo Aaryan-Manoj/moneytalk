@@ -6,12 +6,11 @@ import { useGroup } from '../../context/GroupContext'
 export default function SettlementView() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { groups, getSettlement, expenses, uid } = useGroup()
+  const { groups, getSettlement, expenses } = useGroup()
   const [paid, setPaid] = useState({})
 
   const group = groups.find(g => g.id === id)
-  // ✅ Pass uid so 'Me' is resolved correctly per viewer
-  const { balances, transactions } = getSettlement(id, uid)
+  const { balances, transactions } = getSettlement(id)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
 

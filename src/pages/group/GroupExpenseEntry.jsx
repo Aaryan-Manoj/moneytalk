@@ -80,7 +80,7 @@ export default function GroupExpenseEntry() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>PAID BY</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {group.members.filter(m => m !== 'Me').map(m => (
+              {group.members.map(m => (
                 <button key={m} onClick={() => setPaidBy(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:paidBy===m?'#2563EB':'#F3F4F6',color:paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
@@ -88,7 +88,7 @@ export default function GroupExpenseEntry() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>SPLIT AMONG</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {group.members.filter(m => m !== 'Me').map(m => (
+              {group.members.map(m => (
                 <button key={m} onClick={() => toggleSplit(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:splitAmong.includes(m)?'#7C3AED':'#F3F4F6',color:splitAmong.includes(m)?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
@@ -108,7 +108,7 @@ export default function GroupExpenseEntry() {
                   <div>
                     <p style={{fontSize:'12px',fontWeight:'600',color:'#6B7280',marginBottom:'6px'}}>PAID BY</p>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                      {group.members.filter(m => m !== 'Me').map(m => (
+                      {group.members.map(m => (
                         <button key={m} onClick={() => setEditData(p => ({...p,paidBy:m}))} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.paidBy===m?'#2563EB':'#F3F4F6',color:editData.paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
                       ))}
                     </div>
@@ -116,7 +116,7 @@ export default function GroupExpenseEntry() {
                   <div>
                     <p style={{fontSize:'12px',fontWeight:'600',color:'#6B7280',marginBottom:'6px'}}>SPLIT AMONG</p>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                      {group.members.filter(m => m !== 'Me').map(m => (
+                      {group.members.map(m => (
                         <button key={m} onClick={() => toggleEditSplit(m)} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.splitAmong.includes(m)?'#7C3AED':'#F3F4F6',color:editData.splitAmong.includes(m)?'#FFFFFF':'#6B7280'}}>{m}</button>
                       ))}
                     </div>
