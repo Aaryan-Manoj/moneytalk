@@ -124,7 +124,7 @@ export default function AccountDetail() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>PAID BY</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {account.members.map(m => (
+              {account.members.filter(m => m !== 'Me').map(m => (
                 <button key={m} onClick={() => setPaidBy(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:paidBy===m?'#2563EB':'#F3F4F6',color:paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
