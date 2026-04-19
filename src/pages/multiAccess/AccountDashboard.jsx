@@ -1,11 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMultiAccess } from '../../context/MultiAccessContext'
+import { auth, db } from '../../firebase'
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore'
+import { onAuthStateChanged } from 'firebase/auth'
 
 export default function AccountDashboard() {
   const navigate = useNavigate()
   const { accounts, deleteAccount } = useMultiAccess()
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [notifications, setNotifications] = useState([])
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const q = query(
+          collection(db, 'notifications'),
+          where('toUid', '==', user.uid),
+          where('type', '==', 'group_deleted'),
+          where('read', '==', false),
+          where('feature', '==', 'multiAccess')
+        )
+        const snap = await getDocs(q)
+        setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      }
+    })
+    return () => unsub()
+  }, [])
+
+  const dismissNotification = async (id) => {
+    await updateDoc(doc(db, 'notifications', id), { read: true })
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }
 
   const handleDelete = async (accountId) => {
     await deleteAccount(accountId)
@@ -33,6 +59,17 @@ export default function AccountDashboard() {
         <button onClick={() => navigate('/dashboard')} style={{background:'none',border:'none',color:'#6B7280',fontSize:'14px',cursor:'pointer'}}>← Back</button>
         <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
       </div>
+
+      {notifications.length > 0 && (
+        <div style={{marginBottom:'24px'}}>
+          {notifications.map(n => (
+            <div key={n.id} style={{background:'#FEF3C7',borderRadius:'12px',padding:'16px',marginBottom:'8px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <p style={{fontSize:'14px',color:'#92400E'}}>{n.fromName} deleted shared account "{n.groupName}"</p>
+              <button onClick={() => dismissNotification(n.id)} style={{background:'none',border:'none',color:'#92400E',cursor:'pointer',fontSize:'16px',marginLeft:'12px'}}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {confirmDelete && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}}>

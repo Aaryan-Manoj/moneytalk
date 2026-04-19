@@ -16,7 +16,7 @@ export default function GroupDashboard() {
       if (user) {
         const q = query(
           collection(db, 'notifications'),
-          where('toName', '==', user.displayName),
+          where('toUid', '==', user.uid),
           where('read', '==', false),
           where('type', '==', 'group_deleted')
         )
@@ -104,9 +104,7 @@ export default function GroupDashboard() {
                 {group.status === 'active' && (
                   <span onClick={() => navigate(`/group/${group.id}/expenses`)} style={{color:'#6B7280',fontSize:'20px',cursor:'pointer'}}>›</span>
                 )}
-                {group.createdBy === group.createdBy && (
-                  <button onClick={() => setConfirmDelete(group.id)} style={{background:'#FEE2E2',border:'none',borderRadius:'8px',padding:'6px 10px',fontSize:'13px',cursor:'pointer',color:'#EF4444'}}>Delete</button>
-                )}
+                <button onClick={() => setConfirmDelete(group.id)} style={{background:'#FEE2E2',border:'none',borderRadius:'8px',padding:'6px 10px',fontSize:'13px',cursor:'pointer',color:'#EF4444'}}>Delete</button>
               </div>
             </div>
             <div style={{marginTop:'8px'}}>{getStatusBadge(group)}</div>

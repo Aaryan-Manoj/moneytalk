@@ -1,18 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { exportGroupPDF } from '../../pdfExport'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useGroup } from '../../context/GroupContext'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '../../firebase'
 
 export default function SettlementView() {
   const navigate = useNavigate()
   const { id } = useParams()
   const { groups, getSettlement, expenses } = useGroup()
-  const [paid, setPaid] = useState({})
 
   const group = groups.find(g => g.id === id)
   const { balances, transactions } = getSettlement(id)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
+
+  const [paid, setPaid] = useState(group?.paidStatus || {})
+
+  useEffect(() => {
+    if (group?.paidStatus) setPaid(group.paidStatus)
+  }, [group])
 
   const memberTotals = {}
   if (group) {
@@ -20,7 +27,14 @@ export default function SettlementView() {
     groupExpenses.forEach(e => { memberTotals[e.paidBy] = (memberTotals[e.paidBy] || 0) + e.amount })
   }
 
-  const togglePaid = (key) => setPaid(prev => ({ ...prev, [key]: !prev[key] }))
+  const togglePaid = async (key) => {
+    const newPaid = { ...paid, [key]: !paid[key] }
+    setPaid(newPaid)
+    const ownerUid = group.ownerUid || group.createdBy
+    if (ownerUid) {
+      await updateDoc(doc(db, 'users', ownerUid, 'groups', id), { paidStatus: newPaid })
+    }
+  }
 
   if (!group) return <div style={{padding:'32px'}}>Group not found.</div>
 
