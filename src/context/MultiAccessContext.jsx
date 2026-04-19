@@ -44,7 +44,7 @@ export function MultiAccessProvider({ children }) {
     if (!uid) return null
     const data = {
       name,
-      members: ['Me', ...memberNames],
+      members: [currentUser?.displayName || 'Me', ...memberNames],
       memberUids: [uid, ...memberUids.filter(u => u)],
       pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
@@ -91,11 +91,9 @@ export function MultiAccessProvider({ children }) {
 
     await updateDoc(ref, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
 
-    // ✅ Write full copy to B's Firestore path
     const myData = { ...data, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting', ownerUid, isShared: true }
     await setDoc(doc(db, 'users', toUid, 'multiAccess', groupId), myData)
 
-    // ✅ Update all other members' copies
     for (const memberUid of (data.memberUids || [])) {
       if (memberUid !== ownerUid && memberUid !== toUid) {
         try {
@@ -111,7 +109,6 @@ export function MultiAccessProvider({ children }) {
       }
     }
 
-    // ✅ Refresh local state
     await loadAccounts(toUid)
   }
 
@@ -229,11 +226,14 @@ export function MultiAccessProvider({ children }) {
     const account = accounts.find(a => a.id === accountId)
     if (!account) return []
     const accExpenses = expenses[accountId] || []
+
     const paid = {}
     account.members.forEach(m => paid[m] = 0)
     accExpenses.forEach(e => { paid[e.paidBy] = (paid[e.paidBy] || 0) + Number(e.amount) })
+
     const totalSpent = accExpenses.reduce((s, e) => s + Number(e.amount), 0)
     const perPerson = totalSpent / account.members.length
+
     return account.members.map(m => ({
       member: m,
       paid: paid[m] || 0,

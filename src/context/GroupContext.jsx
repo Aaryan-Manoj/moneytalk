@@ -42,15 +42,14 @@ export function GroupProvider({ children }) {
 
   const createGroup = async (name, memberUids, memberNames) => {
     if (!uid) return null
-    const ownerName = currentUser?.displayName || 'You'
     const groupData = {
       name,
-      members: [ownerName, ...memberNames],
+      members: [currentUser?.displayName || 'Me', ...memberNames],
       memberUids: [uid, ...memberUids.filter(u => u)],
       pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
       createdBy: uid,
-      createdByName: ownerName,
+      createdByName: currentUser?.displayName || 'Someone',
       createdAt: new Date().toISOString()
     }
     const ref = await addDoc(collection(db, 'users', uid, 'groups'), groupData)
@@ -63,7 +62,7 @@ export function GroupProvider({ children }) {
         await addDoc(collection(db, 'notifications'), {
           toUid: memberUid,
           toName: memberName,
-          fromName: ownerName,
+          fromName: currentUser?.displayName || 'Someone',
           groupId,
           groupName: name,
           ownerUid: uid,
@@ -215,17 +214,32 @@ export function GroupProvider({ children }) {
     if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId), updated)
   }
 
-  const getSettlement = (groupId) => {
+  const getSettlement = (groupId, viewerUid) => {
     const group = groups.find(g => g.id === groupId)
     if (!group) return { balances: [], transactions: [] }
     const groupExpenses = expenses[groupId] || []
 
+    const resolvedMembers = group.members.map((m) => {
+      if (m === 'Me') {
+        if (viewerUid && viewerUid === (group.ownerUid || group.createdBy)) return 'Me'
+        return group.createdByName || 'Me'
+      }
+      return m
+    })
+
     const balances = {}
-    group.members.forEach(m => balances[m] = 0)
+    resolvedMembers.forEach(m => balances[m] = 0)
 
     groupExpenses.forEach(exp => {
-      const { paidBy, splitAmong, amount } = exp
-      const splitAmount = amount / splitAmong.length
+      const paidBy = exp.paidBy === 'Me'
+        ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
+        : exp.paidBy
+      const splitAmong = exp.splitAmong.map(m =>
+        m === 'Me'
+          ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
+          : m
+      )
+      const splitAmount = exp.amount / splitAmong.length
       splitAmong.forEach(member => {
         if (member !== paidBy) {
           balances[paidBy] = (balances[paidBy] || 0) + splitAmount
