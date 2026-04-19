@@ -1,25 +1,16 @@
-import { useState, useEffect } from 'react'
-import { exportGroupPDF } from '../../pdfExport'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useGroup } from '../../context/GroupContext'
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { exportGroupPDF } from '../../pdfExport'
 
 export default function SettlementView() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { groups, getSettlement, expenses } = useGroup()
+  const { groups, getSettlement, expenses, recordPayment, undoPayment } = useGroup()
 
   const group = groups.find(g => g.id === id)
-  const { balances, transactions } = getSettlement(id)
+  const { balances, transactions, payments: recordedPayments } = getSettlement(id)
   const groupExpenses = expenses[id] || []
   const total = groupExpenses.reduce((s, e) => s + e.amount, 0)
-
-  const [paid, setPaid] = useState(group?.paidStatus || {})
-
-  useEffect(() => {
-    if (group?.paidStatus) setPaid(group.paidStatus)
-  }, [group])
 
   const memberTotals = {}
   if (group) {
@@ -27,12 +18,22 @@ export default function SettlementView() {
     groupExpenses.forEach(e => { memberTotals[e.paidBy] = (memberTotals[e.paidBy] || 0) + e.amount })
   }
 
-  const togglePaid = async (key) => {
-    const newPaid = { ...paid, [key]: !paid[key] }
-    setPaid(newPaid)
-    const ownerUid = group.ownerUid || group.createdBy
-    if (ownerUid) {
-      await updateDoc(doc(db, 'users', ownerUid, 'groups', id), { paidStatus: newPaid })
+  const isPaid = (from, to) => {
+    return (recordedPayments || []).some(p => p.from === from && p.to === to)
+  }
+
+  const getPaymentId = (from, to) => {
+    const p = (recordedPayments || []).find(p => p.from === from && p.to === to)
+    return p?.id
+  }
+
+  const handleMarkPaid = async (t) => {
+    const alreadyPaid = isPaid(t.from, t.to)
+    if (alreadyPaid) {
+      const payId = getPaymentId(t.from, t.to)
+      if (payId) await undoPayment(id, payId)
+    } else {
+      await recordPayment(id, t.from, t.to, t.amount)
     }
   }
 
@@ -68,38 +69,60 @@ export default function SettlementView() {
           <div key={member} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #F3F4F6'}}>
             <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{member}</p>
             <p style={{fontSize:'15px',fontWeight:'700',color:balance>0?'#10B981':balance<0?'#EF4444':'#6B7280'}}>
-              {balance>0?`gets back ₹${balance}`:balance<0?`owes ₹${Math.abs(balance)}`:'Settled'}
+              {balance>0?`gets back ₹${balance}`:balance<0?`owes ₹${Math.abs(balance)}`:'Settled ✓'}
             </p>
           </div>
         ))}
       </div>
 
-      <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)'}}>
+      <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
         <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>WHO PAYS WHOM</p>
         {transactions.length === 0 && (
           <p style={{color:'#10B981',fontSize:'15px',fontWeight:'600',textAlign:'center'}}>All settled! 🎉</p>
         )}
         {transactions.map((t, i) => {
-          const key = `${t.from}-${t.to}`
+          const paid = isPaid(t.from, t.to)
           return (
-            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px',borderRadius:'12px',background:'#F9FAFB',marginBottom:'8px'}}>
+            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px',borderRadius:'12px',background: paid ? '#F0FDF4' : '#F9FAFB',marginBottom:'8px',border: paid ? '1px solid #86EFAC' : 'none'}}>
               <div>
                 <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>
-                  <span style={{color:'#EF4444'}}>{t.from}</span>
+                  <span style={{color: paid ? '#10B981' : '#EF4444'}}>{t.from}</span>
                   <span style={{color:'#6B7280'}}> owes </span>
                   <span style={{color:'#10B981'}}>{t.to}</span>
                 </p>
-                <p style={{fontSize:'14px',fontWeight:'700',color:'#111827',marginTop:'2px'}}>₹{t.amount.toLocaleString()}</p>
+                <p style={{fontSize:'14px',fontWeight:'700',color: paid ? '#10B981' : '#111827',marginTop:'2px'}}>
+                  ₹{t.amount.toLocaleString()} {paid ? '— Paid ✓' : ''}
+                </p>
               </div>
-              <button onClick={() => togglePaid(key)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:paid[key]?'#10B981':'#F3F4F6',color:paid[key]?'#FFFFFF':'#6B7280'}}>
-                {paid[key]?'Paid ✓':'Mark Paid'}
+              <button
+                onClick={() => handleMarkPaid(t)}
+                style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background: paid ? '#FEE2E2' : '#10B981',color: paid ? '#EF4444' : '#FFFFFF'}}
+              >
+                {paid ? 'Undo' : 'Mark Paid'}
               </button>
             </div>
           )
         })}
       </div>
 
-      <button onClick={() => exportGroupPDF(group, groupExpenses, {balances, transactions})} style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%',marginTop:'16px'}}>⬇ Export PDF</button>
+      {recordedPayments && recordedPayments.length > 0 && (
+        <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
+          <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>PAYMENT HISTORY</p>
+          {recordedPayments.map(p => (
+            <div key={p.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #F3F4F6'}}>
+              <p style={{fontSize:'14px',color:'#111827'}}><strong>{p.from}</strong> paid <strong>{p.to}</strong></p>
+              <p style={{fontSize:'14px',fontWeight:'700',color:'#10B981'}}>₹{p.amount.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => exportGroupPDF(group, groupExpenses, { balances, transactions })}
+        style={{background:'#F3F4F6',border:'none',borderRadius:'12px',padding:'12px',fontSize:'14px',fontWeight:'600',color:'#6B7280',cursor:'pointer',width:'100%'}}
+      >
+        ⬇ Export PDF
+      </button>
     </div>
   )
 }

@@ -8,6 +8,7 @@ const GroupContext = createContext()
 export function GroupProvider({ children }) {
   const [groups, setGroups] = useState([])
   const [expenses, setExpenses] = useState({})
+  const [payments, setPayments] = useState({})
   const [uid, setUid] = useState(null)
   const [currentUser, setCurrentUser] = useState(null)
 
@@ -22,6 +23,7 @@ export function GroupProvider({ children }) {
         setCurrentUser(null)
         setGroups([])
         setExpenses({})
+        setPayments({})
       }
     })
     return () => unsub()
@@ -32,19 +34,23 @@ export function GroupProvider({ children }) {
     const loadedGroups = groupSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     setGroups(loadedGroups)
     const loadedExpenses = {}
+    const loadedPayments = {}
     for (const group of loadedGroups) {
       const ownerUid = group.ownerUid || userId
       const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', group.id, 'expenses'))
       loadedExpenses[group.id] = expSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const paySnap = await getDocs(collection(db, 'users', ownerUid, 'groups', group.id, 'payments'))
+      loadedPayments[group.id] = paySnap.docs.map(d => ({ id: d.id, ...d.data() }))
     }
     setExpenses(loadedExpenses)
+    setPayments(loadedPayments)
   }
 
   const createGroup = async (name, memberUids, memberNames) => {
     if (!uid) return null
     const groupData = {
       name,
-      members: [currentUser?.displayName || 'Me', ...memberNames],
+      members: [currentUser?.displayName || 'Someone', ...memberNames],
       memberUids: [uid, ...memberUids.filter(u => u)],
       pendingMembers: memberNames.filter((_, i) => memberUids[i]),
       status: memberNames.length === 0 ? 'active' : 'awaiting',
@@ -54,7 +60,6 @@ export function GroupProvider({ children }) {
     }
     const ref = await addDoc(collection(db, 'users', uid, 'groups'), groupData)
     const groupId = ref.id
-
     for (let i = 0; i < memberNames.length; i++) {
       const memberUid = memberUids[i]
       const memberName = memberNames[i]
@@ -73,7 +78,6 @@ export function GroupProvider({ children }) {
         })
       }
     }
-
     setGroups(prev => [...prev, { id: groupId, ...groupData }])
     return groupId
   }
@@ -84,39 +88,22 @@ export function GroupProvider({ children }) {
     const groupSnap = await getDoc(groupRef)
     if (!groupSnap.exists()) return
     const groupData = groupSnap.data()
-
     const newPending = (groupData.pendingMembers || []).filter(m => m !== toName)
     const isNowActive = newPending.length === 0
-
-    await updateDoc(groupRef, {
-      pendingMembers: newPending,
-      status: isNowActive ? 'active' : 'awaiting'
-    })
-
-    const myGroupData = {
-      ...groupData,
-      pendingMembers: newPending,
-      status: isNowActive ? 'active' : 'awaiting',
-      ownerUid,
-      isShared: true
-    }
+    await updateDoc(groupRef, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
+    const myGroupData = { ...groupData, pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting', ownerUid, isShared: true }
     await setDoc(doc(db, 'users', toUid, 'groups', groupId), myGroupData)
-
     for (const memberUid of (groupData.memberUids || [])) {
       if (memberUid !== ownerUid && memberUid !== toUid) {
         try {
           const memberCopy = doc(db, 'users', memberUid, 'groups', groupId)
           const memberSnap = await getDoc(memberCopy)
           if (memberSnap.exists()) {
-            await updateDoc(memberCopy, {
-              pendingMembers: newPending,
-              status: isNowActive ? 'active' : 'awaiting'
-            })
+            await updateDoc(memberCopy, { pendingMembers: newPending, status: isNowActive ? 'active' : 'awaiting' })
           }
         } catch (e) {}
       }
     }
-
     await loadGroups(toUid)
   }
 
@@ -126,7 +113,6 @@ export function GroupProvider({ children }) {
     const groupSnap = await getDoc(groupRef)
     if (!groupSnap.exists()) return
     const groupData = groupSnap.data()
-
     await addDoc(collection(db, 'notifications'), {
       toUid: ownerUid,
       toName: groupData.createdByName,
@@ -139,11 +125,9 @@ export function GroupProvider({ children }) {
       status: 'info',
       createdAt: new Date().toISOString()
     })
-
     const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', groupId, 'expenses'))
     for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', e.id))
     await deleteDoc(groupRef)
-
     for (const memberUid of (groupData.memberUids || [])) {
       if (memberUid !== ownerUid) {
         try { await deleteDoc(doc(db, 'users', memberUid, 'groups', groupId)) } catch (e) {}
@@ -155,7 +139,6 @@ export function GroupProvider({ children }) {
     const group = groups.find(g => g.id === groupId)
     if (!group) return
     const ownerUid = group.ownerUid || uid
-
     for (const memberUid of (group.memberUids || [])) {
       if (memberUid !== ownerUid) {
         try {
@@ -176,19 +159,19 @@ export function GroupProvider({ children }) {
         } catch (e) {}
       }
     }
-
     const expSnap = await getDocs(collection(db, 'users', ownerUid, 'groups', groupId, 'expenses'))
     for (const e of expSnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', e.id))
+    const paySnap = await getDocs(collection(db, 'users', ownerUid, 'groups', groupId, 'payments'))
+    for (const p of paySnap.docs) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'payments', p.id))
     await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId))
-
     for (const memberUid of (group.memberUids || [])) {
       if (memberUid !== ownerUid) {
         try { await deleteDoc(doc(db, 'users', memberUid, 'groups', groupId)) } catch (e) {}
       }
     }
-
     setGroups(prev => prev.filter(g => g.id !== groupId))
     setExpenses(prev => { const copy = {...prev}; delete copy[groupId]; return copy })
+    setPayments(prev => { const copy = {...prev}; delete copy[groupId]; return copy })
   }
 
   const addGroupExpense = async (groupId, expense) => {
@@ -214,43 +197,50 @@ export function GroupProvider({ children }) {
     if (ownerUid) await updateDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'expenses', expId), updated)
   }
 
-  const getSettlement = (groupId, viewerUid) => {
+  const recordPayment = async (groupId, from, to, amount) => {
     const group = groups.find(g => g.id === groupId)
-    if (!group) return { balances: [], transactions: [] }
-    const groupExpenses = expenses[groupId] || []
+    const ownerUid = group?.ownerUid || uid
+    const payment = { from, to, amount, paidAt: new Date().toISOString() }
+    if (ownerUid) {
+      const ref = await addDoc(collection(db, 'users', ownerUid, 'groups', groupId, 'payments'), payment)
+      setPayments(prev => ({ ...prev, [groupId]: [...(prev[groupId] || []), { id: ref.id, ...payment }] }))
+    }
+  }
 
-    const resolvedMembers = group.members.map((m) => {
-      if (m === 'Me') {
-        if (viewerUid && viewerUid === (group.ownerUid || group.createdBy)) return 'Me'
-        return group.createdByName || 'Me'
-      }
-      return m
-    })
+  const undoPayment = async (groupId, paymentId) => {
+    const group = groups.find(g => g.id === groupId)
+    const ownerUid = group?.ownerUid || uid
+    setPayments(prev => ({ ...prev, [groupId]: (prev[groupId] || []).filter(p => p.id !== paymentId) }))
+    if (ownerUid) await deleteDoc(doc(db, 'users', ownerUid, 'groups', groupId, 'payments', paymentId))
+  }
+
+  const getSettlement = (groupId) => {
+    const group = groups.find(g => g.id === groupId)
+    if (!group) return { balances: [], transactions: [], payments: [] }
+    const groupExpenses = expenses[groupId] || []
+    const groupPayments = payments[groupId] || []
 
     const balances = {}
-    resolvedMembers.forEach(m => balances[m] = 0)
+    group.members.forEach(m => balances[m] = 0)
 
     groupExpenses.forEach(exp => {
-      const paidBy = exp.paidBy === 'Me'
-        ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
-        : exp.paidBy
-      const splitAmong = exp.splitAmong.map(m =>
-        m === 'Me'
-          ? (viewerUid === (group.ownerUid || group.createdBy) ? 'Me' : group.createdByName || 'Me')
-          : m
-      )
-      const splitAmount = exp.amount / splitAmong.length
-      splitAmong.forEach(member => {
-        if (member !== paidBy) {
-          balances[paidBy] = (balances[paidBy] || 0) + splitAmount
+      const splitAmount = exp.amount / exp.splitAmong.length
+      exp.splitAmong.forEach(member => {
+        if (member !== exp.paidBy) {
+          balances[exp.paidBy] = (balances[exp.paidBy] || 0) + splitAmount
           balances[member] = (balances[member] || 0) - splitAmount
         }
       })
     })
 
+    groupPayments.forEach(pay => {
+      balances[pay.from] = (balances[pay.from] || 0) + pay.amount
+      balances[pay.to] = (balances[pay.to] || 0) - pay.amount
+    })
+
     const transactions = []
-    const pos = Object.entries(balances).filter(([,v]) => v > 0).map(([m,v]) => ({ member: m, amount: v }))
-    const neg = Object.entries(balances).filter(([,v]) => v < 0).map(([m,v]) => ({ member: m, amount: -v }))
+    const pos = Object.entries(balances).filter(([,v]) => v > 0.01).map(([m,v]) => ({ member: m, amount: v }))
+    const neg = Object.entries(balances).filter(([,v]) => v < -0.01).map(([m,v]) => ({ member: m, amount: -v }))
     let i = 0, j = 0
     while (i < pos.length && j < neg.length) {
       const amount = Math.min(pos[i].amount, neg[j].amount)
@@ -263,12 +253,13 @@ export function GroupProvider({ children }) {
 
     return {
       balances: Object.entries(balances).map(([member, balance]) => ({ member, balance: Math.round(balance * 100) / 100 })),
-      transactions
+      transactions,
+      payments: groupPayments
     }
   }
 
   return (
-    <GroupContext.Provider value={{ groups, createGroup, deleteGroup, acceptGroupInvite, declineGroupInvite, addGroupExpense, deleteGroupExpense, updateGroupExpense, getSettlement, expenses, uid, currentUser, loadGroups }}>
+    <GroupContext.Provider value={{ groups, createGroup, deleteGroup, acceptGroupInvite, declineGroupInvite, addGroupExpense, deleteGroupExpense, updateGroupExpense, recordPayment, undoPayment, getSettlement, expenses, payments, uid, currentUser, loadGroups }}>
       {children}
     </GroupContext.Provider>
   )
