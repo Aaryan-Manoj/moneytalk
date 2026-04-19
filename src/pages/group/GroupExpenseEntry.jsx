@@ -5,10 +5,13 @@ import { useGroup } from '../../context/GroupContext'
 export default function GroupExpenseEntry() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { groups, addGroupExpense, deleteGroupExpense, updateGroupExpense, expenses } = useGroup()
+  const { groups, addGroupExpense, deleteGroupExpense, updateGroupExpense, expenses, currentUser } = useGroup()
 
   const group = groups.find(g => g.id === id)
   const groupExpenses = [...(expenses[id] || [])].sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  const displayName = currentUser?.displayName || 'Me'
+  const resolvedMembers = (group?.members || []).map(m => m === 'Me' ? displayName : m)
 
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
@@ -69,7 +72,7 @@ export default function GroupExpenseEntry() {
         <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
       </div>
       <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'4px'}}>{group.name}</h1>
-      <p style={{fontSize:'14px',color:'#6B7280',marginBottom:'24px'}}>{group.members.join(', ')}</p>
+      <p style={{fontSize:'14px',color:'#6B7280',marginBottom:'24px'}}>{resolvedMembers.join(', ')}</p>
 
       <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'24px',boxShadow:'0 2px 12px rgba(0,0,0,0.06)',marginBottom:'16px'}}>
         <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'16px'}}>ADD EXPENSE</p>
@@ -80,7 +83,7 @@ export default function GroupExpenseEntry() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>PAID BY</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {group.members.map(m => (
+              {resolvedMembers.map(m => (
                 <button key={m} onClick={() => setPaidBy(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:paidBy===m?'#2563EB':'#F3F4F6',color:paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
@@ -88,7 +91,7 @@ export default function GroupExpenseEntry() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>SPLIT AMONG</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {group.members.map(m => (
+              {resolvedMembers.map(m => (
                 <button key={m} onClick={() => toggleSplit(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:splitAmong.includes(m)?'#7C3AED':'#F3F4F6',color:splitAmong.includes(m)?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
@@ -108,7 +111,7 @@ export default function GroupExpenseEntry() {
                   <div>
                     <p style={{fontSize:'12px',fontWeight:'600',color:'#6B7280',marginBottom:'6px'}}>PAID BY</p>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                      {group.members.map(m => (
+                      {resolvedMembers.map(m => (
                         <button key={m} onClick={() => setEditData(p => ({...p,paidBy:m}))} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.paidBy===m?'#2563EB':'#F3F4F6',color:editData.paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
                       ))}
                     </div>
@@ -116,7 +119,7 @@ export default function GroupExpenseEntry() {
                   <div>
                     <p style={{fontSize:'12px',fontWeight:'600',color:'#6B7280',marginBottom:'6px'}}>SPLIT AMONG</p>
                     <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
-                      {group.members.map(m => (
+                      {resolvedMembers.map(m => (
                         <button key={m} onClick={() => toggleEditSplit(m)} style={{padding:'6px 12px',borderRadius:'8px',border:'none',fontSize:'13px',fontWeight:'600',cursor:'pointer',background:editData.splitAmong.includes(m)?'#7C3AED':'#F3F4F6',color:editData.splitAmong.includes(m)?'#FFFFFF':'#6B7280'}}>{m}</button>
                       ))}
                     </div>
@@ -131,7 +134,7 @@ export default function GroupExpenseEntry() {
                   <div style={{flex:1}}>
                     <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{e.desc}</p>
                     <p style={{fontSize:'13px',color:'#2563EB',fontWeight:'600'}}>{new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</p>
-                    <p style={{fontSize:'13px',color:'#6B7280'}}>Paid by {e.paidBy} · Split: {e.splitAmong.join(', ')}</p>
+                    <p style={{fontSize:'13px',color:'#6B7280'}}>Paid by {e.paidBy === 'Me' ? displayName : e.paidBy} · Split: {e.splitAmong.map(m => m === 'Me' ? displayName : m).join(', ')}</p>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginLeft:'12px'}}>
                     <p style={{fontSize:'15px',fontWeight:'700',color:'#111827'}}>₹{e.amount}</p>

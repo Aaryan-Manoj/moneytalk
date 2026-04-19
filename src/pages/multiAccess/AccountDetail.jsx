@@ -8,11 +8,14 @@ const COLORS = ['#2563EB', '#7C3AED', '#0EA5E9', '#8B5CF6', '#3B82F6', '#6D28D9'
 export default function AccountDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { accounts, expenses, addExpense, deleteExpense, updateExpense, updateBudget, addUser, getRemaining } = useMultiAccess()
+  const { accounts, expenses, addExpense, deleteExpense, updateExpense, updateBudget, addUser, getRemaining, currentUser } = useMultiAccess()
 
   const account = accounts.find(a => a.id === id)
   const accExpenses = expenses[id] || []
   const remaining = getRemaining(id)
+
+  const displayName = currentUser?.displayName || 'Me'
+  const resolvedMembers = (account?.members || []).map(m => m === 'Me' ? displayName : m)
 
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
@@ -27,7 +30,7 @@ export default function AccountDetail() {
   const [showChart, setShowChart] = useState(false)
 
   const spendingByMember = account ? account.members.map((m, i) => ({
-    name: m,
+    name: m === 'Me' ? displayName : m,
     value: accExpenses.filter(e => e.paidBy === m).reduce((s, e) => s + Number(e.amount), 0),
     color: COLORS[i % COLORS.length]
   })).filter(d => d.value > 0) : []
@@ -64,7 +67,7 @@ export default function AccountDetail() {
         <button onClick={() => navigate('/dashboard')} style={{background:'#EFF6FF',border:'none',color:'#2563EB',fontSize:'14px',cursor:'pointer',borderRadius:'8px',padding:'4px 12px',fontWeight:'600'}}>⌂ Home</button>
       </div>
       <h1 style={{fontSize:'24px',fontWeight:'700',color:'#111827',marginBottom:'4px'}}>{account.name}</h1>
-      <p style={{fontSize:'14px',color:'#6B7280',marginBottom:'24px'}}>{account.members.join(', ')}</p>
+      <p style={{fontSize:'14px',color:'#6B7280',marginBottom:'24px'}}>{resolvedMembers.join(', ')}</p>
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',marginBottom:'24px'}}>
         <div style={{background:'#2563EB',borderRadius:'16px',padding:'20px'}}>
@@ -124,7 +127,7 @@ export default function AccountDetail() {
           <div>
             <p style={{fontSize:'13px',fontWeight:'600',color:'#6B7280',marginBottom:'8px'}}>PAID BY</p>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
-              {account.members.map(m => (
+              {resolvedMembers.map(m => (
                 <button key={m} onClick={() => setPaidBy(m)} style={{padding:'8px 16px',borderRadius:'10px',border:'none',fontSize:'14px',fontWeight:'600',cursor:'pointer',background:paidBy===m?'#2563EB':'#F3F4F6',color:paidBy===m?'#FFFFFF':'#6B7280'}}>{m}</button>
               ))}
             </div>
@@ -142,7 +145,7 @@ export default function AccountDetail() {
                 <div style={{flex:1}}>
                   <p style={{fontSize:'15px',fontWeight:'600',color:'#111827'}}>{e.desc}</p>
                   <p style={{fontSize:'13px',color:'#2563EB',fontWeight:'600'}}>{new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</p>
-                  <p style={{fontSize:'13px',color:'#6B7280'}}>{e.paidBy}</p>
+                  <p style={{fontSize:'13px',color:'#6B7280'}}>{e.paidBy === 'Me' ? displayName : e.paidBy}</p>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:'8px',marginLeft:'12px'}}>
                   {editId === e.id ? (
