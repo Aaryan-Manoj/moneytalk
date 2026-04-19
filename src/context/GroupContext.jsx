@@ -233,42 +233,22 @@ export function GroupProvider({ children }) {
       })
     })
 
-    // Build raw transactions from expenses only
-    const rawBalances = { ...balances }
-    const posR = Object.entries(rawBalances).filter(([,v]) => v > 0.01).map(([m,v]) => ({ member: m, amount: v }))
-    const negR = Object.entries(rawBalances).filter(([,v]) => v < -0.01).map(([m,v]) => ({ member: m, amount: -v }))
-    const rawTransactions = []
-    let i = 0, j = 0
-    while (i < posR.length && j < negR.length) {
-      const amount = Math.min(posR[i].amount, negR[j].amount)
-      rawTransactions.push({ from: negR[j].member, to: posR[i].member, amount: Math.round(amount * 100) / 100 })
-      posR[i].amount -= amount
-      negR[j].amount -= amount
-      if (posR[i].amount < 0.01) i++
-      if (negR[j].amount < 0.01) j++
-    }
-
-    // For each paid transaction, reverse its contribution from balances
-    rawTransactions.forEach(t => {
-      const isPaid = groupPayments.some(p => p.from === t.from && p.to === t.to)
-      if (isPaid) {
-        balances[t.from] = (balances[t.from] || 0) + t.amount
-        balances[t.to] = (balances[t.to] || 0) - t.amount
-      }
+    groupPayments.forEach(pay => {
+      balances[pay.from] = (balances[pay.from] || 0) + pay.amount
+      balances[pay.to] = (balances[pay.to] || 0) - pay.amount
     })
 
-    // Rebuild final transactions from adjusted balances
     const transactions = []
-    const pos2 = Object.entries(balances).filter(([,v]) => v > 0.01).map(([m,v]) => ({ member: m, amount: v }))
-    const neg2 = Object.entries(balances).filter(([,v]) => v < -0.01).map(([m,v]) => ({ member: m, amount: -v }))
-    let a = 0, b = 0
-    while (a < pos2.length && b < neg2.length) {
-      const amount = Math.min(pos2[a].amount, neg2[b].amount)
-      transactions.push({ from: neg2[b].member, to: pos2[a].member, amount: Math.round(amount * 100) / 100 })
-      pos2[a].amount -= amount
-      neg2[b].amount -= amount
-      if (pos2[a].amount < 0.01) a++
-      if (neg2[b].amount < 0.01) b++
+    const pos = Object.entries(balances).filter(([,v]) => v > 0.01).map(([m,v]) => ({ member: m, amount: v }))
+    const neg = Object.entries(balances).filter(([,v]) => v < -0.01).map(([m,v]) => ({ member: m, amount: -v }))
+    let i = 0, j = 0
+    while (i < pos.length && j < neg.length) {
+      const amount = Math.min(pos[i].amount, neg[j].amount)
+      transactions.push({ from: neg[j].member, to: pos[i].member, amount: Math.round(amount * 100) / 100 })
+      pos[i].amount -= amount
+      neg[j].amount -= amount
+      if (pos[i].amount < 0.01) i++
+      if (neg[j].amount < 0.01) j++
     }
 
     return {
